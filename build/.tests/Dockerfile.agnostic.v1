@@ -1,0 +1,756 @@
+############################################################
+# Copyright (c) 2026 Igor Sadza 
+# Released under the GPLv3 license
+# ----------------------------------------------------------
+# 
+#
+############################################################
+
+ARG \
+    DISTRIBUTION=debian \
+    SUITE=trixie-slim
+
+# =============================================================================
+# : Preflights
+# =============================================================================
+
+# ---------------------
+# Preflight: curl
+
+FROM alpine:latest 
+
+RUN \ 
+    echo "**** Prepare ****" \
+        && apk update \
+        && apk add --no-cache \
+            build-base \
+            clang \
+            file \
+            gnupg \
+            libssh2-dev \
+            libssh2-static \
+            nghttp2-dev \
+            nghttp2-static \
+            openssl-dev \
+            openssl-libs-static \
+            perl \
+            zlib-static \
+    && \
+    echo "**** Fetch ****" \
+        && mkdir -p /opt/curl \ 
+        && CURL_VERSION="$(\
+              wget -qO- \
+                https://api.github.com/repos/curl/curl/releases/latest \
+              | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p' \
+              | head -n 1 \             
+           )" \
+        && wget -O /tmp/curl.tar.gz https://curl.se/download/curl-${CURL_VERSION}.tar.gz \
+        && tar -xzf /tmp/curl.tar.gz --strip-components=1 -C /opt/curl \
+    && \
+    echo "**** Build ****" \
+        && cd /opt/curl \
+        && CC=clang \ 
+           LDFLAGS="-static" \
+           PKG_CONFIG="pkg-config --static" \
+           ./configure \
+           --disable-shared \
+           --enable-static \
+           --disable-ldap \
+           --enable-ipv6 \
+           --enable-unix-sockets \
+           --with-ssl \
+           --with-libssh2 \
+           --disable-docs \
+           --disable-manual \
+           --without-libpsl \
+        && make -j4 V=1 LDFLAGS="-static -all-static" \
+        && strip src/curl \
+        && file src/curl \
+        && ./src/curl --version \
+        && cp ./src/curl /usr/bin/curl
+
+# ---------------------
+# Preflight: yq 
+
+FROM mikefarah/yq:latest
+
+# ---------------------
+# Preflight: jq 
+
+FROM ghcr.io/jqlang/jq:latest
+
+# =============================================================================
+# : Base 
+# =============================================================================
+
+FROM ${DISTRIBUTION}:${SUITE} AS RUNTIME
+
+# Build Time Arguments 
+ARG \
+    DEBIAN_FRONTEND=noninteractive
+
+# ---------------------
+# Base: Copy preflights 
+
+COPY --from=0 /usr/bin/curl /usr/bin/curl
+COPY --from=1 /usr/bin/yq   /usr/bin/yq
+COPY --from=2 /jq           /usr/bin/jq
+
+# ---------------------
+# Base: Configure Locales
+
+ARG \
+    TZ=UTC \
+    LANG="en_US.UTF-8" \
+    LANGUAGE="en_US:en" \
+    LC_CTYPE="en_US.UTF-8" \
+    LC_ALL="en_US.UTF-8"
+
+ENV \
+    LANG=${LANG} \
+    LC_ALL=${LC_ALL} \
+    LANGUAGE=${LANGUAGE} \
+    TZ=${TZ}
+
+RUN \
+    echo "**** Base: User Tools ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+            ca-certificates \
+            locales \
+            ssl-cert \
+            lsb-release \
+            tzdata \
+            sudo \
+    && \
+    echo "**** Set locale and timezone ****" \ 
+        && sed -i -e "s/# $LANG.*/$LANG UTF-8/" /etc/locale.gen \
+        && locale-gen ${LANG} \
+        && ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime \
+        && echo "${TZ}" > /etc/timezone \
+        && localedef -i en_US -f UTF-8 en_US.UTF-8 \
+        && dpkg-reconfigure --frontend=noninteractive locales \
+        && update-locale LANG=$LANG \
+    && \
+    echo "**** Section cleanup ****" \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/cache/apt/* \
+            /var/tmp/* \
+            /tmp/*
+
+# -----------------------------------------------
+# Base: Configure user 
+
+ARG \
+    USER_NAME=dot \
+    USER_UID=1000 \
+    USER_GID=1000
+
+RUN \ 
+    echo "**** Base: User Configure ****" \
+      && groupadd \
+        --gid ${USER_GID} \
+        ${USER_NAME} \
+      && useradd \
+        --uid "${USER_UID}" \
+        --gid "${USER_GID}" \
+        --create-home \
+        --home-dir "/home/${USER_NAME}" \
+        --shell /bin/bash \
+        "${USER_NAME}" \
+    && \
+    echo "**** Base: Configure SUDO Privileges ****" \
+        && usermod -aG sudo ${USER_NAME} \
+        && printf '%s\n' \
+            "${USER_NAME} ALL=(ALL) NOPASSWD: ALL" \
+            > "/etc/sudoers.d/${USER_NAME}" \
+        && chmod 0440 "/etc/sudoers.d/${USER_NAME}" \
+    && \
+    echo "**** Base: Configure XDG_RUNTIME_DIR ****" \     
+        && mkdir -p /run/user/${USER_UID} \
+        && chown -R ${USER_UID}:${USER_UID} /run/user/${USER_UID} \
+        && chmod 0700 /run/user/${USER_UID}
+
+ENV \
+    XDG_RUNTIME_DIR=/run/user/${USER_UID}
+
+# Switch to non-root user.
+USER ${USER_NAME}
+
+# Execute bash as root for futher installations.
+SHELL [ "/usr/bin/sudo", "-E", "--", "/bin/bash", "-c" ]
+
+# =============================================================================
+# : Core
+# =============================================================================
+
+# -----------------------------------------------
+# Core: Neovim
+
+ARG \
+    INSTALL_NEOVIM="true" \
+    NEOVIM_VERSION="latest"
+
+RUN \
+    echo "**** Core: Install Neovim / (${INSTALL_NEOVIM}) ****" \
+    && \
+    if [ "${INSTALL_NEOVIM}" = "true" ]; \
+    then \
+    echo "**** Fetching Release URL ****" \
+        && API_URL="https://api.github.com/repos/neovim/neovim" \
+        && if [ "$NEOVIM_VERSION" = "latest" ]; then \
+              NEOVIM_VERSION="$(\
+                curl -fsSL ${API_URL}/releases/latest \
+                | jq -r .tag_name \
+              )"; \
+           fi \
+        && RELEASE_URL="$( \
+             curl -fsSL "${API_URL}/releases?per_page=100" | \
+               jq -r --arg VERSION "${NEOVIM_VERSION}" \
+               '.[] \
+               | select( \
+                   .tag_name == $VERSION \
+               ) \
+               | .assets[] \
+               | select( \
+                   .browser_download_url \
+                   | contains("nvim-linux-x86_64") \
+                     and endswith(".tar.gz") \
+               ) \
+               | .browser_download_url' \
+           )" \
+    && \
+    echo "**** Installing Release ****" \
+        && curl -o /tmp/nvim.tar.gz -fsSL "${RELEASE_URL}" \
+        && tar -xzf /tmp/nvim.tar.gz -C /opt \
+        && ln -sf \
+            /opt/nvim-linux-x86_64/bin/nvim \
+            /usr/local/bin/vi \
+        && vi --version; \
+    fi
+
+# -----------------------------------------------
+# Core: Docker 
+
+ARG \
+    INSTALL_DOCKER="true" \
+    DOCKER_VERSION=latest
+
+#    DOCKER_VERSION=28.3.3 \
+#    BUILDX_VERSION=v0.35.0 \
+#    COMPOSE_VERSION=v5.3.1 
+
+RUN \
+    echo "**** Core: Install Docker / (${INSTALL_DOCKER}) ****" \
+    && \
+    if [ "${INSTALL_DOCKER}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && DOCKER_ARCH="x86_64" \
+        && RELEASE_URL="https://download.docker.com/linux/static/stable/${DOCKER_ARCH}" \
+        && if [ "$DOCKER_VERSION" = "latest" ]; then \
+            DOCKER_VERSION="$( \
+                curl -fsSL "${RELEASE_URL}" \
+                | grep -oE 'docker-[0-9]+\.[0-9]+\.[0-9]+\.tgz' \
+                | sed -E 's/^docker-|\.tgz$//g' \
+                | sort -V \
+                | tail -n 1 \
+            )"; \
+           fi \
+    && \
+    echo "**** Fetch Docker ****" \
+        && curl -fsSL \
+            "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-${DOCKER_VERSION}.tgz" \
+           | tar -xz --strip-components=1 -C /usr/local/bin docker/docker; \
+    fi 
+
+    #&& \
+    #echo "**** Fetch Buildx ****" \
+    #    && PLUGIN_ARCH="linux-amd64" \
+    #    && curl -fsSL \
+    #       "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.${PLUGIN_ARCH}" \
+    #       -o /usr/local/lib/docker/cli-plugins/docker-buildx \
+    #    && chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx \
+    #&& \
+    #echo "**** Fetch Buildx ****" \
+    #    && PLUGIN_ARCH="linux-x86_64" \
+    #    && curl -fsSL \
+    #      "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-${PLUGIN_ARCH}" \
+    #      -o /usr/local/lib/docker/cli-plugins/docker-compose \
+    #    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
+    #&& \
+    #echo "**** Validate ****" \
+    #    && docker --version \
+    #    && docker buildx version \
+    #    && docker compose version; \    
+    #fi
+
+# -----------------------------------------------
+# Core: K9S 
+
+ARG \
+    INSTALL_K9S="true" \
+    K9S_VERSION="latest"
+
+RUN \
+    echo "**** Core: Install K9S / (${INSTALL_K9S}) ****" \
+    && \
+    if [ "${INSTALL_K9S}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            curl \
+            jq \
+    && \
+    echo "**** Fetching Release URL ****" \
+        && API_URL="https://api.github.com/repos/derailed/k9s" \
+        && if [ "$K9S_VERSION" = "latest" ]; then \
+              K9S_VERSION="$(\
+                curl -fsSL ${API_URL}/releases/latest \
+                | jq -r .tag_name \
+              )"; \
+           fi \
+        && RELEASE_URL="$( \
+             curl -fsSL "${API_URL}/releases?per_page=100" | \
+               jq -r --arg VERSION "${K9S_VERSION}" \
+               '.[] \
+               | select( \
+                   .tag_name == $VERSION \
+               ) \
+               | .assets[] \
+               | select( \
+                   .browser_download_url \
+                   | contains("Linux_amd64") \
+                     and endswith(".tar.gz") \
+               ) \
+               | .browser_download_url' \
+           )" \
+    && \
+    echo "**** Installing Release ****" \
+        && curl -o /tmp/k9s.tar.gz -fsSL "${RELEASE_URL}" \
+        && tar -xzf /tmp/k9s.tar.gz -C /opt \
+        && ls /opt \
+        && ln -sf \
+            /opt/k9s\
+            /usr/local/bin/k9s \
+        && k9s version \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Helm 
+
+ARG \
+    INSTALL_HELM="true"
+
+RUN \
+    echo "**** Core: Install Helm / (${INSTALL_HELM}) ****" \
+    && \
+    if [ "${INSTALL_HELM}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            ca-certificates \
+            curl \
+            gpg  \
+            apt-transport-https \
+    && \
+    echo "**** Fetching GPG ****" \
+      && curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey -o "${TMPDIR:-/tmp}/helm.gpg" \
+      && gpg --dearmor --output /usr/share/keyrings/helm.gpg "${TMPDIR:-/tmp}/helm.gpg" > /dev/null \
+    && \
+    echo "**** Configure Sources ****" \
+      && GPG_URL="https://packages.buildkite.com/helm-linux/helm-debian/any/" \ 
+      && printf '%s\n' \
+          "deb [signed-by=/usr/share/keyrings/helm.gpg] ${GPG_URL} any main" \
+         > /etc/apt/sources.list.d/helm.list \
+    && \
+    echo "**** Installing ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+          helm \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Kubectl 
+
+ARG \
+    INSTALL_KUBECTL="true"
+
+RUN \
+    echo "**** Core: Install Kubectl / (${INSTALL_KUBECTL}) ****" \
+    && \
+    if [ "${INSTALL_KUBECTL}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            ca-certificates \
+            curl \
+            gpg  \
+            apt-transport-https \
+    && \
+    echo "**** Fetching GPG ****" \
+      && curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key -o "${TMPDIR:-/tmp}/kubernetes.gpg" \
+      && gpg --dearmor --output /usr/share/keyrings/kubernetes.gpg "${TMPDIR:-/tmp}/kubernetes.gpg" > /dev/null \
+    && \
+    echo "**** Configure Sources ****" \
+      && GPG_URL="https://pkgs.k8s.io/core:/stable:/v1.36/deb/" \
+      && printf '%s\n' \
+          "deb [signed-by=/usr/share/keyrings/kubernetes.gpg] ${GPG_URL} /" \
+         > /etc/apt/sources.list.d/kubernetes.list \
+    && \
+    echo "**** Installing ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+          kubectl \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Terraform 
+
+ARG \
+    INSTALL_TERRAFORM="true" \
+    TERRAFORM_VERSION="v1.36"
+
+RUN \
+    echo "**** Core: Install Terraform / (${INSTALL_TERRAFORM}) ****" \
+    && \
+    if [ "${INSTALL_TERRAFORM}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            ca-certificates \
+            curl \
+            gpg  \
+            apt-transport-https \
+    && \
+    echo "**** Fetching GPG ****" \
+      && curl -fsSL https://apt.releases.hashicorp.com/gpg -o "${TMPDIR:-/tmp}/terraform.gpg" \
+      && gpg --dearmor --output /usr/share/keyrings/terraform.gpg "${TMPDIR:-/tmp}/terraform.gpg" > /dev/null \
+    && \
+    echo "**** Configure Sources ****" \
+      && SUITE=$(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) \
+      && GPG_URL="https://apt.releases.hashicorp.com ${SUITE} main" \
+      && printf '%s\n' \
+          "deb [signed-by=/usr/share/keyrings/terraform.gpg] ${GPG_URL} /" \
+         > /etc/apt/sources.list.d/terraform.list \
+    && \
+    echo "**** Installing ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+          terraform \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Azure-CLI 
+
+ARG \
+    INSTALL_AZURE_CLI="true" \
+    AZURE_SUITE="bullseye"
+
+      #&& SUITE=$(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) \
+RUN \
+    echo "**** Core: Install Azure CLI / (${INSTALL_AZURE_CLI}) ****" \
+    && \
+    if [ "${INSTALL_AZURE_CLI}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            ca-certificates \
+            curl \
+    && \
+    echo "**** Fetching GPG ****" \
+      && install -m 0755 -d /etc/apt/keyrings \
+      && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc -o /etc/apt/keyrings/microsoft.asc \
+      && chmod a+r /etc/apt/keyrings/microsoft.asc \
+    && \
+    echo "**** Configure Sources ****" \
+      && printf '%s\n' \
+          'Types: deb' \
+          'URIs: https://packages.microsoft.com/repos/azure-cli/' \
+          "Suites: ${AZURE_SUITE}" \
+          'Components: stable' \
+          "Architectures: $(dpkg --print-architecture)" \
+          'Signed-By: /etc/apt/keyrings/microsoft.asc' \
+         > /etc/apt/sources.list.d/microsoft.azure-cli.sources \
+    && \
+    echo "**** Installing ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+            azure-cli \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Node
+
+ARG \
+    INSTALL_NODE="true"
+
+RUN \
+    echo "**** Core: Install Node / (${INSTALL_NODE}) ****" \
+    && \
+    if [ "${INSTALL_NODE}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            ca-certificates \
+            curl \
+    && \
+    echo "**** Fetching GPG ****" \
+      && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "${TMPDIR:-/tmp}/node.gpg" \
+      && gpg --dearmor --output /usr/share/keyrings/node.gpg "${TMPDIR:-/tmp}/node.gpg" > /dev/null \
+    && \
+    echo "**** Configure Sources ****" \
+      && GPG_URL="https://deb.nodesource.com/node_22.x" \
+      && printf '%s\n' \
+          "deb [signed-by=/usr/share/keyrings/node.gpg] ${GPG_URL} nodistro main" \
+         > /etc/apt/sources.list.d/node.list \
+    && \
+    echo "**** Installing ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+            nodejs \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Tiny AI
+
+ARG \
+    INSTALL_TINY_AI="true" \
+    LLAMA_CPP_REF="master"
+
+RUN \
+    echo "**** Core: Install Tiny AI / (${INSTALL_TINY_AI}) ****" \
+    && \
+    if [ "${INSTALL_TINY_AI}" = "true" ]; then \
+        apt-get update \
+        && apt-get install --no-install-recommends -y \
+            cmake \
+            curl \
+            git \
+            libcurl4-openssl-dev \
+            cmake \ 
+            build-essential \
+        && git clone \
+            --depth 1 \
+            --branch "${LLAMA_CPP_REF}" \
+            https://github.com/ggml-org/llama.cpp.git \
+            /tmp/llama.cpp \
+        && cmake \
+            -S /tmp/llama.cpp \
+            -B /tmp/llama.cpp/build \
+            -DGGML_NATIVE=OFF \
+            -DLLAMA_CURL=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+        && cmake \
+            --build /tmp/llama.cpp/build \
+            --config Release \
+            --target llama-server llama-cli \
+            --parallel "$(nproc)" \
+        && install -m 0755 \
+            /tmp/llama.cpp/build/bin/llama-server \
+            /usr/local/bin/llama-server \
+        && install -m 0755 \
+            /tmp/llama.cpp/build/bin/llama-cli \
+            /usr/local/bin/llama-cli \
+        && apt-get clean \
+        && rm -rf \
+            /tmp/llama.cpp \
+            /var/lib/apt/lists/*; \
+    fi
+
+# -----------------------------------------------
+# Core: AiChat 
+
+ARG \
+    INSTALL_AICHAT="true" \
+    AICHAT_VERSION="latest"
+
+RUN \
+    echo "**** Core: Install AI Chat / (${INSTALL_AICHAT}) ****" \
+    && \
+    if [ "${INSTALL_AICHAT}" = "true" ]; \
+    then \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \          
+            curl \
+            jq \
+    && \
+    echo "**** Fetching Release URL ****" \
+        && API_URL="https://api.github.com/repos/sigoden/aichat" \
+        && if [ "$AICHAT_VERSION" = "latest" ]; then \
+              AI_CHAT_VERSION="$(\
+                curl -fsSL ${API_URL}/releases/latest \
+                | jq -r .tag_name \
+              )"; \
+           fi \
+        && RELEASE_URL="$( \
+             curl -fsSL "${API_URL}/releases?per_page=100" | \
+               jq -r --arg VERSION "${AICHAT_VERSION}" \
+               '.[] \
+               | select( \
+                   .tag_name == $VERSION \
+               ) \
+               | .assets[] \
+               | select( \
+                   .browser_download_url \
+                   | contains("x86_64-unknown-linux-musl") \
+                     and endswith(".tar.gz") \
+               ) \
+               | .browser_download_url' \
+           )" \
+    && \
+    echo "**** Installing Release ****" \
+        && echo "${RELEASE_URL}" \
+        && curl -o /tmp/aichat.tar.gz -fsSL "${RELEASE_URL}" \
+        && tar -xzf /tmp/aichat.tar.gz -C /opt \
+        && ln -sf \
+            /opt/aichat \
+            /usr/local/bin/aichat \
+    && \
+    echo "**** Section cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*; \
+    fi
+
+# -----------------------------------------------
+# Core: Miscellaneous
+
+RUN \
+    echo "**** Core: Miscellaneous  ****" \
+        && apt-get update \
+      	&& apt-get install -y --no-install-recommends \
+            socat \
+            dnsutils \
+            bash-completion \
+            git \
+            tmux \
+            lua5.1 \
+            luarocks \
+            build-essential \
+            golang \
+            ripgrep \
+            fd-find \
+    && \
+    echo "**** Cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*
+
+# =============================================================================
+# : Config 
+# =============================================================================
+
+ENV \
+    XDG_CONFIG_HOME=/home/${USER_NAME}/.config \
+    XDG_DATA_HOME=/home/${USER_NAME}/.local/share \
+    XDG_STATE_HOME=/home/${USER_NAME}/.local/state \
+    XDG_CACHE_HOME=/home/${USER_NAME}/.cache \
+    HOME=/home/${USER_NAME}/ \
+    SHELL=/bin/bash
+
+ENV \
+    TINY_AI_MODEL=${TINY_AI_MODEL} \
+    TINY_AI_HOST=127.0.0.1 \
+    TINY_AI_PORT=8080 \
+    LLAMA_CACHE=/home/${USER_NAME}/.cache/llama.cpp \
+    TINY_AI_MODEL="HuggingFaceTB/SmolLM2-360M-Instruct-GGUF:Q8_0"
+
+# =============================================================================
+# : Execute 
+# =============================================================================
+
+WORKDIR ${HOME} 
+
+# Add FS overlay and set permissions in one step
+COPY --chmod=0755 overlay ${HOME}
+
+RUN \
+    echo "**** Execute: Final Touch ****" \
+        && \
+        echo "**** Fetch Nvim plugins ****" \
+            && vi --headless -c qall \
+        && \
+        echo "**** Create XDG directories ****" \
+            && mkdir -p \
+              "${XDG_CONFIG_HOME}" \
+              "${XDG_DATA_HOME}" \
+              "${XDG_STATE_HOME}" \
+              "${XDG_CACHE_HOME}" \
+            && chown -R "${USER_UID}:${USER_GID}" "/home/${USER_NAME}" \
+        && \
+        echo "**** Download Tiny Model ****" \
+            && mkdir -p /models \
+            && /usr/local/bin/llama-cli \
+                -hf "$TINY_AI_MODEL" \
+                --no-warmup \
+        && \
+        echo "Make sure that everything under ${HOME} belongs to user" \
+            && chmod -R a+rwX ${HOME} \
+            && chown -R ${USER_UID}:${USER_UID} ${HOME}
+
+# Execute bash as root for futher installations.
+CMD ["sleep", "infinity"]

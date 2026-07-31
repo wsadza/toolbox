@@ -1,0 +1,6 @@
+- model_id: llama-local
+  model_name: local-model
+  api_base: http://127.0.0.1:8080/v1
+  aliases:
+    - local
+    - llama

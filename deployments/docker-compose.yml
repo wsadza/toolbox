@@ -1,0 +1,124 @@
+############################################################
+# Copyright (c) 2026 Igor Sadza
+# Released under the GLPv3 General license
+# ----------------------------------------------------------
+#
+# FILE: ./deployments/docker-compose.yml
+# DESC: 
+#
+############################################################
+
+services:
+
+  # ==================================================
+  # toolbox 
+  # ==================================================
+
+  toolbox:
+    hostname:       toolbox 
+    container_name: toolbox 
+    image:          toolbox
+    #init:           true
+    #tty:            true
+    #stdin_open:     true
+    working_dir:    /host
+    restart:        unless-stopped
+
+    # =============================================================================
+    # : Ports 
+    # =============================================================================
+    ports:
+      # Supervisor webui
+      - 9001:9001
+
+    # =============================================================================
+    # : Volumes
+    # =============================================================================
+    volumes:
+      # Make host files available at identical absolute paths.
+      - /:/host
+
+      # Mount host home
+      - ${HOME}:/opt/home
+
+      # Mount Docker Socket
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # =============================================================================
+    # : Build 
+    # =============================================================================
+    build:
+      dockerfile: "./Dockerfile"
+      context:    "../build/"
+
+      args:
+        # -- Base
+        DISTRIBUTION:           ${DISTRIBUTION}
+        SUITE:                  ${SUITE}
+        DIGEST:                 ${DIGEST}
+
+        # -- User
+        USER_NAME:              ${USER_NAME}
+        USER_UID:               ${USER_UID}
+        DOCKER_GID:             ${DOCKER_GID}
+
+        # -- Neovim
+        INSTALL_NEOVIM:         ${INSTALL_NEOVIM}
+        NEOVIM_VERSION:         ${NEOVIM_VERSION}
+        TREE_SITTER_CLI:        ${TREE_SITTER_CLI}
+
+        # -- Docker
+        INSTALL_DOCKER:         ${INSTALL_DOCKER}
+        DOCKER_CE_VERSION:      ${DOCKER_CE_VERSION}
+        DOCKER_CE_CLI_VERSION:  ${DOCKER_CE_CLI_VERSION}
+        CONTAINERD_VERSION:     ${CONTAINERD_VERSION}
+        DOCKER_BUILDX_VERSION:  ${DOCKER_BUILDX_VERSION}
+        DOCKER_COMPOSE_VERSION: ${DOCKER_COMPOSE_VERSION}
+
+        # -- K9s
+        INSTALL_K9S:            ${INSTALL_K9S}
+        K9S_VERSION:            ${K9S_VERSION}
+
+        # -- Helm
+        INSTALL_HELM:           ${INSTALL_HELM}
+        HELM_VERSION:           ${HELM_VERSION}
+
+        # -- Kubectl
+        INSTALL_KUBECTL:        ${INSTALL_KUBECTL}
+        KUBECTL_VERSION:        ${KUBECTL_VERSION}
+
+        # -- Terraform
+        INSTALL_TERRAFORM:      ${INSTALL_TERRAFORM}
+        TERRAFORM_VERSION:      ${TERRAFORM_VERSION}
+
+        # -- AzureCLI
+        INSTALL_AZURE_CLI:      ${INSTALL_AZURE_CLI}
+        AZURE_CLI_SUITE:        ${AZURE_CLI_SUITE}
+        AZURE_CLI_VERSION:      ${AZURE_CLI_VERSION}
+
+        # -- Node.js
+        INSTALL_NODE_JS:        ${INSTALL_NODE_JS}
+        NODE_JS_VERSION:        ${NODE_JS_VERSION}
+        NODE_JS_MAJOR:          ${NODE_JS_MAJOR}
+
+        # -- LLAMA.cpp 
+        INSTALL_LLAMA_CPP:      ${INSTALL_LLAMA_CPP}
+        LLAMA_CPP_REF:          ${LLAMA_CPP_REF}
+        LLAMA_ARG_CTX_SIZE:     ${LLAMA_ARG_CTX_SIZE}
+
+        # -- AI-Model
+        DOWNLOAD_AI_MODEL:      ${DOWNLOAD_AI_MODEL}
+        AI_MODEL_URL:           ${AI_MODEL_URL}
+        AI_MODEL_PATH:          ${AI_MODEL_PATH}
+        AI_MODEL:               ${AI_MODEL}
+        AI_MODEL_ALIAS:         ${AI_MODEL_ALIAS}
+
+        # -- AIChat
+        INSTALL_AICHAT:         ${INSTALL_AICHAT}
+        AICHAT_VERSION:         ${AICHAT_VERSION}
+
+    # =============================================================================
+    # : Environment 
+    # =============================================================================
+    environment:
+        LLAMA_ARG_CTX_SIZE:     ${LLAMA_ARG_CTX_SIZE}

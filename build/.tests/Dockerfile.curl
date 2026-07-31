@@ -1,0 +1,69 @@
+############################################################
+# Copyright (c) 2026 Igor Sadza 
+# Released under the GPLv3 license
+# ----------------------------------------------------------
+# 
+#
+############################################################
+
+ARG \
+    DISTRIBUTION=alpine \
+    SUITE=latest
+
+FROM \
+    ${DISTRIBUTION}:${SUITE}
+
+ARG \
+    CURL_VERSION=latest
+
+RUN \ 
+    echo "**** Prepare ****" \
+        && apk update \
+        && apk add --no-cache \
+            build-base \
+            clang \
+            file \
+            gnupg \
+            libssh2-dev \
+            libssh2-static \
+            nghttp2-dev \
+            nghttp2-static \
+            openssl-dev \
+            openssl-libs-static \
+            perl \
+            zlib-static \
+    && \
+    echo "**** Fetch ****" \
+        && mkdir -p /opt/curl \ 
+        && if [ "$CURL_VERSION" = "latest" ]; then \
+             CURL_VERSION="$(\
+                wget -qO- \
+                  https://api.github.com/repos/curl/curl/releases/latest \
+                | sed -n 's/.*"name":[[:space:]]*"\([^"]*\)".*/\1/p' \
+                | head -n 1 \             
+             )"; \
+           fi \
+        && wget -O /tmp/curl.tar.gz https://curl.se/download/curl-${CURL_VERSION}.tar.gz \
+        && tar -xzf /tmp/curl.tar.gz --strip-components=1 -C /opt/curl \
+    && \
+    echo "**** Build ****" \
+        && cd /opt/curl \
+        && CC=clang \ 
+           LDFLAGS="-static" \
+           PKG_CONFIG="pkg-config --static" \
+           ./configure \
+           --disable-shared \
+           --enable-static \
+           --disable-ldap \
+           --enable-ipv6 \
+           --enable-unix-sockets \
+           --with-ssl \
+           --with-libssh2 \
+           --disable-docs \
+           --disable-manual \
+           --without-libpsl \
+        && make -j4 V=1 LDFLAGS="-static -all-static" \
+        && strip src/curl \
+        && file src/curl \
+        && ./src/curl --version \
+        && cp ./src/curl /usr/bin/curl

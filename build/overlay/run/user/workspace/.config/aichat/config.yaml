@@ -1,0 +1,10 @@
+model: llamacpp:local
+
+clients:
+  - type: openai-compatible
+    name: llamacpp
+    api_base: http://127.0.0.1:8080/v1
+    api_key: no-key
+    models:
+      - name: local
+        max_input_tokens: 8192
