@@ -18,18 +18,8 @@ services:
     hostname:       toolbox 
     container_name: toolbox 
     image:          toolbox
-    #init:           true
-    #tty:            true
-    #stdin_open:     true
     working_dir:    /host
     restart:        unless-stopped
-
-    # =============================================================================
-    # : Ports 
-    # =============================================================================
-    ports:
-      # Supervisor webui
-      - 9001:9001
 
     # =============================================================================
     # : Volumes
@@ -101,24 +91,9 @@ services:
         NODE_JS_VERSION:        ${NODE_JS_VERSION}
         NODE_JS_MAJOR:          ${NODE_JS_MAJOR}
 
-        # -- LLAMA.cpp 
-        INSTALL_LLAMA_CPP:      ${INSTALL_LLAMA_CPP}
-        LLAMA_CPP_REF:          ${LLAMA_CPP_REF}
-        LLAMA_ARG_CTX_SIZE:     ${LLAMA_ARG_CTX_SIZE}
-
-        # -- AI-Model
-        DOWNLOAD_AI_MODEL:      ${DOWNLOAD_AI_MODEL}
-        AI_MODEL_URL:           ${AI_MODEL_URL}
-        AI_MODEL_PATH:          ${AI_MODEL_PATH}
-        AI_MODEL:               ${AI_MODEL}
-        AI_MODEL_ALIAS:         ${AI_MODEL_ALIAS}
-
-        # -- AIChat
-        INSTALL_AICHAT:         ${INSTALL_AICHAT}
-        AICHAT_VERSION:         ${AICHAT_VERSION}
-
     # =============================================================================
-    # : Environment 
+    # : Environments 
     # =============================================================================
     environment:
-        LLAMA_ARG_CTX_SIZE:     ${LLAMA_ARG_CTX_SIZE}
+        # -- Liqiudprompt
+        LIQUIDPROMPT_THEME:     ${LIQUIDPROMPT_THEME}

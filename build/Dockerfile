@@ -78,9 +78,6 @@ ARG \
     USER_UID=1000 \
     USER_GID=1000
 
-ENV \
-    XDG_RUNTIME_DIR=/run/user/workspace
-
 RUN \
     echo "**** Base: User Configure ****" \
       && groupadd \
@@ -89,23 +86,15 @@ RUN \
       && useradd \
         --uid "${USER_UID}" \
         --gid "${USER_GID}" \
-        --create-home \
-        --home-dir "/opt/home" \
         --shell /bin/bash \
         "${USER_NAME}" \
-      && mkdir -p "/opt/home" \
     && \
     echo "**** Base: Configure SUDO Privileges ****" \
         && usermod -aG sudo ${USER_NAME} \
         && printf '%s\n' \
             "${USER_NAME} ALL=(ALL) NOPASSWD: ALL" \
             > "/etc/sudoers.d/${USER_NAME}" \
-        && chmod 0440 "/etc/sudoers.d/${USER_NAME}" \
-    && \
-    echo "**** Base: Configure XDG_RUNTIME_DIR ****" \
-        && mkdir -p ${XDG_RUNTIME_DIR} \
-        && chown -R ${USER_UID}:${USER_UID} ${XDG_RUNTIME_DIR} \
-        && chmod 0700 ${XDG_RUNTIME_DIR} 
+        && chmod 0440 "/etc/sudoers.d/${USER_NAME}"
 
 # =============================================================================
 # : Core
@@ -155,10 +144,12 @@ RUN \
     && \
     echo "**** Installing Release ****" \
         && curl -o /tmp/nvim.tar.gz -fsSL "${RELEASE_URL}" \
-        && tar -xzf /tmp/nvim.tar.gz -C /opt \
-        && ln -sf \
-            /opt/nvim-linux-x86_64/bin/nvim \
-            /usr/local/bin/vi \
+        && mkdir -p /opt/neovim \
+        && tar -xzf /tmp/nvim.tar.gz \
+            --strip-components=1 \
+            --directory=/opt/neovim \
+        && ln -sf /opt/neovim/bin/nvim /usr/local/bin/nvim \
+        && ln -sf /usr/local/bin/nvim /usr/local/bin/vi \
         && vi --version \
     && \
     echo "**** Section cleanup ****" \
@@ -367,7 +358,7 @@ RUN \
       && gpg --dearmor --output /usr/share/keyrings/kubernetes.gpg "${TMPDIR:-/tmp}/kubernetes.gpg" > /dev/null \
     && \
     echo "**** Configure Sources ****" \
-      && GPG_URL="https://pkgs.k8s.io/core:/stable:/v1.36/deb/" \
+      && GPG_URL="https://pkgs.k8s.io/core:/stable:/${KUBECTL_MINOR}/deb/" \
       && printf '%s\n' \
           "deb [signed-by=/usr/share/keyrings/kubernetes.gpg] ${GPG_URL} /" \
          > /etc/apt/sources.list.d/kubernetes.list \
@@ -528,138 +519,6 @@ RUN \
     fi
 
 # -----------------------------------------------
-# Core: LLAMA (BIN)
-
-ARG \
-    INSTALL_LLAMA_CPP="false" \
-    LLAMA_CPP_REF="master"
-
-RUN \
-    echo "**** Core: Install LLAMA | Reference: ${LLAMA_CPP_REF} ****" \
-    && \
-    if [ "${INSTALL_LLAMA_CPP}" = "true" ]; then \
-        apt-get update \
-        && apt-get install --no-install-recommends -y \
-            cmake \
-            curl \
-            git \
-            libcurl4-openssl-dev \
-            cmake \
-            build-essential \
-        && git clone \
-            --depth 1 \
-            --branch "${LLAMA_CPP_REF}" \
-            https://github.com/ggml-org/llama.cpp.git \
-            /tmp/llama.cpp \
-        && cmake \
-            -S /tmp/llama.cpp \
-            -B /tmp/llama.cpp/build \
-            -DGGML_NATIVE=OFF \
-            -DLLAMA_CURL=ON \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DCMAKE_BUILD_TYPE=Release \
-        && cmake \
-            --build /tmp/llama.cpp/build \
-            --config Release \
-            --target llama-server llama-cli \
-            --parallel "$(nproc)" \
-        && install -m 0755 \
-            /tmp/llama.cpp/build/bin/llama-server \
-            /usr/local/bin/llama-server \
-        && install -m 0755 \
-            /tmp/llama.cpp/build/bin/llama-cli \
-            /usr/local/bin/llama-cli \
-        && apt-get clean \
-        && rm -rf \
-            /tmp/llama.cpp \
-            /var/lib/apt/lists/*; \
-    fi
-
-# -----------------------------------------------
-# Core: AIChat (BIN)
-
-ARG \
-    INSTALL_AICHAT="false" \
-    AICHAT_VERSION="latest"
-
-RUN \
-    echo "**** Core: Install AIChat | Version: ${AICHAT_VERSION} ****" \
-    && \
-    if [ "${INSTALL_AICHAT}" = "true" ]; \
-    then \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-            curl \
-            jq \
-    && \
-    echo "**** Fetching Release URL ****" \
-        && API_URL="https://api.github.com/repos/sigoden/aichat" \
-        && if [ "$AICHAT_VERSION" = "latest" ]; then \
-              AICHAT_VERSION="$(\
-                curl -fsSL ${API_URL}/releases/latest \
-                | jq -r .tag_name \
-              )"; \
-           fi \
-        && RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases?per_page=100" | \
-               jq -r --arg VERSION "${AICHAT_VERSION}" \
-               '.[] \
-               | select( \
-                   .tag_name == $VERSION \
-               ) \
-               | .assets[] \
-               | select( \
-                   .browser_download_url \
-                   | contains("x86_64-unknown-linux-musl") \
-                     and endswith(".tar.gz") \
-               ) \
-               | .browser_download_url' \
-           )" \
-    && \
-    echo "**** Installing Release ****" \
-        && echo "${RELEASE_URL}" \
-        && curl -o /tmp/aichat.tar.gz -fsSL "${RELEASE_URL}" \
-        && tar -xzf /tmp/aichat.tar.gz -C /opt \
-        && ln -sf \
-            /opt/aichat \
-            /usr/local/bin/aichat \
-    && \
-    echo "**** Section cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*; \
-    fi
-
-# -----------------------------------------------
-# Core: AIChat (BIN)
-
-#ARG \
-#    INSTALL_AI_STACK="false" \
-#    AI_CHAT_VERSION="latest" \
-#    AIDER_VERSION="latest" \
-#    LLM_CLI_VERSION="latest" \
-#
-#RUN \
-#    echo "**** Core: Install AIConsoleStack ****" \
-#    && \
-#    if [ "${INSTALL_AI_STACK}" = "true" ]; \
-#    then \
-#    echo "**** Prepare ****" \
-#        && apt-get update \
-#        && apt-get install --no-install-recommends -y \
-#            python3 \
-#            pipx \
-#            curl \
-#            jq \
-#    && \
-#
-#    fi
-#
-# -----------------------------------------------
 # Core: Install Gomplate 
 
 RUN \
@@ -703,7 +562,7 @@ RUN \
 #
 
 RUN \
-    echo "**** Core: Miscellaneous  ****" \
+    echo "**** Core: Miscellaneous (apt) ****" \
     && \
     echo "**** Install extra apt packages ****" \
       && apt-get update \
@@ -715,7 +574,6 @@ RUN \
           tmux \
           lua5.1 \
           luarocks \
-          build-essential \
           golang \
           ripgrep \
           fd-find \
@@ -735,6 +593,8 @@ RUN \
           lolcat \
           boxes \
           python3-pip \
+          tree \
+          iputils-ping \
     && \
     echo "**** Cleanup ****" \
         && apt-get clean autoclean -y \
@@ -744,95 +604,105 @@ RUN \
             /var/tmp/* \
             /tmp/*
 
-# =============================================================================
-# : Config 
-# =============================================================================
-
 # -----------------------------------------------
-# Postflight: Installing nvim plugins dependencies
+# Core: Python & NPM & Cargo packages 
 #
 
+# ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} 
+# ~ if arg is NON empty add --version
+
 ARG \
-    TREE_SITTER_CLI=latest
+    TREE_SITTER_CLI=
 
 RUN \
-    echo "**** Postflight: Miscellaneous  ****" \
+    echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
     && \
         echo "**** Install extra python packages ****" \
-              && pipx install --global llm uv \
+              && pipx install --global uv \
         && \
+        if [ "${INSTALL_NODE_JS}" = "true" ]; \
+        then \
         echo "**** Install extra node packages ****" \
-              && npm install --global opencode-ai \
-              && npm install --global neovim \
+              && npm install --global \
+                  opencode-ai \
+                  neovim \
+              && npm cache clean --force; \
+        fi \
         && \
         echo "**** Install extra cargo packages ****" \
               && rustup default stable \
               && cargo install \
                   tree-sitter-cli \
                   --locked \
-                  --version ${TREE_SITTER_CLI} \
                   --root /usr/local \
+                  ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} \
     && \
     echo "**** Clean installation caches ****" \
-      && npm cache clean --force \
-      && python3 -m pip cache purge
+        && python3 -m pip cache purge
+
+# =============================================================================
+# : Config 
+# =============================================================================
 
 # -----------------------------------------------
-# Postflight: Variables
+# Config: Variables
 #
 
 ENV \
-    XDG_CONFIG_HOME=${XDG_RUNTIME_DIR}/.config \
-    XDG_DATA_HOME=${XDG_RUNTIME_DIR}/.local/.share \
-    XDG_STATE_HOME=${XDG_RUNTIME_DIR}/.local/.state \
-    XDG_CACHE_HOME=${XDG_RUNTIME_DIR}/.local/.cache \
-    XDG_BIN_HOME=${XDG_RUNTIME_DIR}/.local/.bin \ 
-    HOME=/opt/home \
     SHELL=/bin/bash \
     TERM=xterm-256color
 
 ENV \
-    NPM_CONFIG_CACHE=${XDG_RUNTIME_DIR}/npm-cache \
-    NPM_CONFIG_USERCONFIG=${XDG_RUNTIME_DIR}/.npmrc \
+    XDG_ROOT=/opt/toolbox
+
+ENV \
+    XDG_RUNTIME_DIR=/run/toolbox \
+    XDG_CONFIG_HOME=${XDG_ROOT}/config \
+    XDG_DATA_HOME=${XDG_ROOT}/share \
+    XDG_STATE_HOME=${XDG_ROOT}/state \
+    XDG_CACHE_HOME=${XDG_ROOT}/cache \
+    XDG_BIN_HOME=${XDG_ROOT}/bin
+
+# Node.js / npm
+ENV \
+    NPM_CONFIG_CACHE=${XDG_CACHE_HOME}/npm \
+    NPM_CONFIG_HOME=${XDG_CONFIG_HOME}/npm \
+    NPM_CONFIG_USERCONFIG=${XDG_CONFIG_HOME}/npm/npmrc \
     NPM_CONFIG_PYTHON=/usr/bin/python3
 
+# Go
 ENV \
-    GOPATH=${XDG_RUNTIME_DIR}/go/gopath \
-    GOCACHE=${XDG_RUNTIME_DIR}/go/build-cache \
-    GOMODCACHE=${XDG_RUNTIME_DIR}/go/module-cache \
-    GOTMPDIR=${XDG_RUNTIME_DIR}/go/tmp
+    GOPATH=${XDG_DATA_HOME}/go \
+    GOCACHE=${XDG_CACHE_HOME}/go/build \
+    GOMODCACHE=${XDG_CACHE_HOME}/go/modules \
+    GOTMPDIR=${XDG_RUNTIME_DIR}/go
+
+# Rust
+ENV \
+    CARGO_HOME=${XDG_DATA_HOME}/cargo \
+    CARGO_TARGET_DIR=${XDG_CACHE_HOME}/cargo/target
+
+# uv
+ENV \
+    UV_TOOL_DIR=${XDG_DATA_HOME}/uv/tools \
+    UV_TOOL_BIN_DIR=${XDG_BIN_HOME} \
+    UV_CACHE_DIR=${XDG_CACHE_HOME}/uv
+
+# Liquidprompt
+ENV \
+    LOCAL_RCFILE=${XDG_CONFIG_HOME}/liquidprompt/liquidpromptrc \
+    LIQUIDPROMPT_THEME=powerline
+
+# OpenCode
+ENV \
+    OPENCODE_HOME=${XDG_CONFIG_HOME}/opencode \
+    OPENCODE_CONFIG=${XDG_CONFIG_HOME}/opencode/opencode.json
 
 ENV \
-    AI_HOST=0.0.0.0 \
-    AI_PORT=8080 \
-    LLAMA_CACHE=${XDG_RUNTIME_DIR}/.cache/llama.cpp \
-    LLAMA_ARG_CTX_SIZE=8192 \
-    LLAMA_ARG_N_GPU_LAYERS=0 \
-    LLAMA_ARG_HOST=0.0.0.0 \
-    LLAMA_ARG_PORT=8080
+    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git
 
 ENV \
-    CARGO_HOME="${XDG_DATA_HOME}/cargo" \
-    CARGO_TARGET_DIR="${XDG_CACHE_HOME}/cargo/target"
-
-ENV \
-    SUPERVISOR_PORT=9091
-
-ENV \
-    UV_TOOL_DIR="${XDG_RUNTIME_DIR}/uv/tools" \
-    UV_TOOL_BIN_DIR="${XDG_BIN_HOME}" 
-
-ENV \
-    LLM_USER_PATH="${XDG_RUNTIME_DIR}/.config/llm"
-
-ENV \
-    LOCAL_RCFILE="${XDG_RUNTIME_DIR}/.config/liqiudpromptrc"
-
-ENV \
-    OPENCODE_CONFIG="${XDG_RUNTIME_DIR}/.config/opencode/opencode.json"
-
-ENV \
-    PATH="${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}:${XDG_BIN_HOME}"
+    PATH=${XDG_BIN_HOME}:${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}
 
 # =============================================================================
 # : Postflight 
@@ -849,20 +719,29 @@ RUN \
         -o "${USER_UID}" \
         -g "${USER_GID}" \
         -m 0755 \
+        \
         "${XDG_CONFIG_HOME}" \
         "${XDG_DATA_HOME}" \
         "${XDG_STATE_HOME}" \
         "${XDG_CACHE_HOME}" \
+        \
         "${NPM_CONFIG_CACHE}" \
+        "${NPM_CONFIG_USERCONFIG}" \
+        \
         "${GOPATH}" \
         "${GOCACHE}" \
         "${GOMODCACHE}" \
         "${GOTMPDIR}" \
+        \
         "${CARGO_HOME}" \
         "${CARGO_TARGET_DIR}" \
+        \
         "${UV_TOOL_DIR}" \
         "${UV_TOOL_BIN_DIR}" \
-        "${LLM_USER_PATH}" \
+        \
+        "${OPENCODE_HOME}" \
+        \
+        "${GIT_CONFIG_GLOBAL}" \
     && \
     install -d \
         -o "${USER_UID}" \
@@ -877,110 +756,24 @@ RUN \
         /dev/null \
         "${NPM_CONFIG_USERCONFIG}"
 
-# -----------------------------------------------
-# Postflight: AI Model 
-#
-
-ARG \
-    DOWNLOAD_AI_MODEL="false" \
-    AI_MODEL_URL="https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf" \
-    AI_MODEL_NAME="qwen2.5-coder-1.5b-instruct-q4_k_m.gguf" \
-    AI_MODEL_PATH="/models" \
-    AI_MODEL_ALIAS="qwen2.5-coder"
-
-ENV \
-    LLAMA_ARG_MODEL="${AI_MODEL_PATH}/${AI_MODEL_NAME}" \
-    LLAMA_ARG_ALIAS="${AI_MODEL_ALIAS}"
-
-RUN \
-    echo "**** Postflight: Download AI Model ****" \
-    && \
-    if [ "${DOWNLOAD_AI_MODEL}" = "true" ]; \
-    then \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-            ca-certificates \
-            curl \
-    && \
-    echo "**** Fetch AI Model ****" \
-        && mkdir -p ${AI_MODEL_PATH} \
-        && curl \
-             --fail \
-             --progress-bar \
-             --location \
-             --retry 5 \
-             --output "${LLAMA_ARG_MODEL}" \
-             "${AI_MODEL_URL}" \
-        && chown "${USER_UID}:${USER_GID}" "${LLAMA_ARG_MODEL}" \
-        && chmod 0644 "${LLAMA_ARG_MODEL}" \
-    && \
-    echo "**** Cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*; \
-    fi
-
 # =============================================================================
 # : User Space 
 # =============================================================================
 
-
-#      rm -rf \
-#          "${XDG_CACHE_HOME}" \
-#          "${XDG_DATA_HOME}" \
-#          /root/.cargo/registry \
-#          /root/.cargo/git \
-#          /root/.cargo/.package-cache \
-#          /tmp/* \
-#          /var/tmp/*
-#
 # Switch to non-root user.
 USER ${USER_NAME}
-
-# -----------------------------------------------
-# Postflight: Installing nvim plugins dependencies
-#
-#
-#ARG \
-#    TREE_SITTER_CLI=latest
-#
-#RUN \
-#    if [ "${INSTALL_NEOVIM}" = "true" ]; \
-#    then \
-#        echo "**** Fetch Nvim Plugins Dependencies ****" \
-#          && rustup default stable \
-#          && cargo install \
-#              tree-sitter-cli \
-#              --locked \
-#              --version ${TREE_SITTER_CLI} \
-#              --root /usr/local; \
-#    fi
-
-# -----------------------------------------------
-# Postflight: Install noevim 
-
-#RUN \
-#    if [ "${INSTALL_NEOVIM}" = "true" ] \
-#    && [ "${INSTALL_NODE_JS}" = "true" ]; then \
-#        echo "**** Install Node Nvim Provider ****"; \
-#        npm install -g neovim; \
-#    fi
 
 # -----------------------------------------------
 # Postflight: Copy overlay and change owner 
 
 COPY \
     --chown=${USER_UID}:${USER_GID} \
-    overlay / 
+    rootfs / 
 
 COPY \
     --chown=${USER_UID}:${USER_GID} \
     --chmod=0755 \
-    overlay/entrypoint.sh /entrypoint.sh
+    rootfs/entrypoint.sh /entrypoint.sh
 
 # -----------------------------------------------
 # Postflight: Installing nvim plugins 
@@ -998,32 +791,6 @@ RUN \
           && vi --headless \
               "+MasonToolsInstallSync" +qa; \
     fi
-
-# -----------------------------------------------
-# Postflight: overlay permissions 
-#
-
-#RUN \
-#    echo "**** Postflight: Changing Permissions ****" \
-#    && \
-#        echo "Make sure that everything under ${XDG_RUNTIME_DIR} belongs to user" \
-#            && chown -R "${USER_UID}:${USER_GID}" "${XDG_RUNTIME_DIR}" \
-#            && chmod -R a+rwX ${XDG_RUNTIME_DIR} \
-#        && \
-#        echo "Make sure that /entrypoint.sh belongs to user" \
-#            && chown -R ${USER_UID}:${USER_GID} /entrypoint.sh \
-#            && chmod 755 /entrypoint.sh
-
-#ENV \
-#    UV_TOOL_DIR=${XDG_RUNTIME_DIR}/config/.local/share/uv/tools \
-#    UV_TOOL_BIN_DIR=${XDG_RUNTIME_DIR}/config/.local/bin \
-#    PATH=/config/.local/bin:${PATH}
-
-#RUN \
-#    uv tool install \
-#      --force \
-#      --python python3.12 \
-#      aider-chat@latest
 
 # =============================================================================
 # : Execute 

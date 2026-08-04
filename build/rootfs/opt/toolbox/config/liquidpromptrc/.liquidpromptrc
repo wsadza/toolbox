@@ -1,0 +1,64 @@
+# ~/.config/liquidpromptrc
+
+# Minimal configuration for the Unfold theme
+
+# ── Essential feedback ─────────────────────────────────────
+
+LP_ENABLE_RUNTIME=1
+LP_ENABLE_RUNTIME_BELL=0
+LP_ENABLE_ERROR=1
+LP_ENABLE_ERROR_MEANING=0
+
+# Hide user and hostname locally; SSH can still show them when relevant
+
+LP_HOSTNAME_ALWAYS=0
+LP_USER_ALWAYS=0
+
+# ── Compact path ───────────────────────────────────────────
+
+LP_ENABLE_SHORTEN_PATH=1
+LP_PATH_LENGTH=30
+LP_PATH_KEEP=2
+LP_ENABLE_HYPERLINKS=1
+
+# ── Git ────────────────────────────────────────────────────
+
+LP_ENABLE_GIT=1
+LP_ENABLE_HG=0
+LP_ENABLE_FOSSIL=0
+
+LP_ENABLE_VCS_ROOT=0
+LP_ENABLE_VCS_ACTION=1
+LP_ENABLE_VCS_STATUS=1
+LP_ENABLE_VCS_STASH=0
+LP_ENABLE_VCS_AHEAD=1
+LP_ENABLE_VCS_LINES=0
+
+# ── Active development context ─────────────────────────────
+
+LP_ENABLE_VIRTUALENV=1
+LP_ENABLE_NODE_VENV=1
+LP_ENABLE_RUBY_VENV=0
+LP_ENABLE_TERRAFORM=0
+LP_ENABLE_KUBECONTEXT=1
+LP_ENABLE_AWS_PROFILE=1
+LP_ENABLE_CONTAINER=1
+LP_ENABLE_SCLS=0
+
+# ── System status ──────────────────────────────────────────
+
+LP_ENABLE_LOAD=0
+LP_ENABLE_BATT=1
+LP_ENABLE_BATT_THRESHOLD=20
+LP_ENABLE_JOBS=1
+LP_ENABLE_TEMP=0
+LP_ENABLE_PROXY=0
+
+# ── Appearance ─────────────────────────────────────────────
+
+LP_ENABLE_TIME=0
+LP_ENABLE_TITLE=1
+LP_ENABLE_MARK=1
+LP_MARK_BELL=""
+LP_PS1_POSTFIX=" "
+P_MARK_BELL=""
