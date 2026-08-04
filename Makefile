@@ -51,8 +51,8 @@ start:
 	@echo "------------------------"
 	@echo " > Starting toolbox..."
 	@echo "------------------------"
-	#@$(CMD_COMPOSE) --progress=plain up --build -d toolbox --force-recreate
-	@$(CMD_COMPOSE) up --build -d toolbox --force-recreate $(ARGS)
+	@$(CMD_COMPOSE) --progress=plain up --build -d toolbox --force-recreate
+	#@$(CMD_COMPOSE) up --build -d toolbox --force-recreate $(ARGS)
 
 ############################################################
 # Run Entry Point

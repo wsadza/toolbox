@@ -87,6 +87,8 @@ RUN \
         --uid "${USER_UID}" \
         --gid "${USER_GID}" \
         --shell /bin/bash \
+        --create-home \
+        --home-dir "/home/${USER_NAME}" \
         "${USER_NAME}" \
     && \
     echo "**** Base: Configure SUDO Privileges ****" \
@@ -521,8 +523,12 @@ RUN \
 # -----------------------------------------------
 # Core: Install Gomplate 
 
+ARG \
+    INSTALL_GOMPLATE="false" \
+    GOMPLATE_VERSION=""
+
 RUN \
-    echo "**** Core: Install Gomplate ****" \
+    echo "**** Core: Install Gomplate | Version: latest ****" \
     && \
     echo "**** Prepare ****" \
         && apt-get update \
@@ -548,6 +554,53 @@ RUN \
         && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
         && chmod +x gomplate \
         && mv gomplate /usr/bin/gomplate \
+    && \
+    echo "**** Cleanup ****" \
+        && apt-get clean autoclean -y \
+        && apt-get autoremove -y \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/tmp/* \
+            /tmp/*
+
+# -----------------------------------------------
+# Core: Install ACT 
+
+ARG \
+    INSTALL_ACT="false" \
+    ACT_VERSION=""
+
+RUN \
+    echo "**** Core: Install ACT | Version: latest ****" \
+    && \
+    echo "**** Prepare ****" \
+        && apt-get update \
+        && apt-get install --no-install-recommends -y \
+           curl \
+           jq \
+    && \
+    echo "**** Installation ****" \
+        && ARCHITECTURE="x86_64" \
+        && API_URL="https://api.github.com/repos/nektos/act" \
+        && RELEASE_URL="$( \
+             curl -fsSL "${API_URL}/releases/latest" | \
+               jq -r \
+               --arg ARCHITECTURE "${ARCHITECTURE}" \
+               '.assets[] \
+               | select( \
+                 .name \
+                 | contains("Linux_x86_64") \
+                   and contains($ARCHITECTURE) \
+               ) \
+               | .browser_download_url' \
+           )" \
+        && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
+        && mkdir -p /opt/act \
+        && tar -xzf /tmp/act.tar.gz \
+            --directory=/opt/act \
+        && chmod +x /opt/act/act \
+        && ln -sf /opt/act/act /usr/local/bin/act \
+        && act --version \
     && \
     echo "**** Cleanup ****" \
         && apt-get clean autoclean -y \
@@ -650,7 +703,8 @@ RUN \
 
 ENV \
     SHELL=/bin/bash \
-    TERM=xterm-256color
+    TERM=xterm-256color \ 
+    HOME=/home/${USER_NAME}
 
 ENV \
     XDG_ROOT=/opt/toolbox
@@ -698,9 +752,16 @@ ENV \
     OPENCODE_HOME=${XDG_CONFIG_HOME}/opencode \
     OPENCODE_CONFIG=${XDG_CONFIG_HOME}/opencode/opencode.json
 
+# Git
 ENV \
-    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git
+    GIT_CONFIG_DIR=${XDG_CONFIG_HOME}/git \
+    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git/gitconfig
 
+# Docker 
+ENV \
+    DOCKER_CONFIG=${XDG_CONFIG_HOME}/docker
+
+# Final Path
 ENV \
     PATH=${XDG_BIN_HOME}:${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}
 
@@ -741,7 +802,7 @@ RUN \
         \
         "${OPENCODE_HOME}" \
         \
-        "${GIT_CONFIG_GLOBAL}" \
+        "${GIT_CONFIG_DIR}" \
     && \
     install -d \
         -o "${USER_UID}" \

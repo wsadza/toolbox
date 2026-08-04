@@ -58,8 +58,8 @@ function run_init_scripts() {
     )
 }
 
-run_init_scripts '/etc/cont-init.d/core'
-run_init_scripts '/etc/cont-init.d/optional'
+run_init_scripts '/etc/cont-init.d/core' '*.sh'
+run_init_scripts '/etc/cont-init.d/optional' '*.sh'
 
 # -----------------------------------
 # Prepare run/start scripts
@@ -83,7 +83,7 @@ function make_executable_scripts() {
   )
 }
 
-make_executable_scripts '/usr/bin'
+make_executable_scripts '/usr/bin' '*.sh'
 
 # -----------------------------------
 # Execute 
