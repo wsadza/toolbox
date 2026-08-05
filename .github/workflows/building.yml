@@ -1,0 +1,85 @@
+name: "building"
+
+on:
+# Trigger this workflow on each tag push
+
+  push:
+# Specify that it should only trigger when a tag is pushed.
+# The wildcard '*' means any tag name will match.
+    tags:
+      - '*'
+
+# Allow manually triggering this workflow from the Actions tab in GitHub.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+
+# ------------------------------------------------------------
+#     ___       _ __   _____           __          
+#    / _ )__ __(_) /__/ / _ \___  ____/ /_____ ____
+#   / _  / // / / / _  / // / _ \/ __/  '_/ -_) __/
+#  /____/\_,_/_/_/\_,_/____/\___/\__/_/\_\\__/_/   
+
+  BuildDocker:
+    name: "Build Docker"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write 
+      packages: write
+    steps:
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 'Find Dockerfile'
+        id: dockerfile_find
+        shell: bash
+        run: |
+          DOCKERFILE_PATH=$(find "${PWD}/apps/kubeforge" -name "Dockerfile.alpine" -print -quit);
+
+          # If no Dockerfile is found, exit with an error
+          if [ -z "${DOCKERFILE_PATH}" ]; then
+            echo "No Dockerfile found in the repository."
+            exit 1
+          fi
+
+          echo "DOCKERFILE_PATH=${DOCKERFILE_PATH}" >> $GITHUB_OUTPUT
+          echo "DOCKERFILE_CONTEXT=${DOCKERFILE_PATH/\/build\/Dockerfile.*}" >> $GITHUB_OUTPUT
+
+      - name: 'Lint Dockerfile'
+        shell: bash
+        run: |
+          docker run --rm -i -e \
+            HADOLINT_IGNORE=DL3008,DL4006,SC2086,DL3003,SC1008,SC2174 \
+            hadolint/hadolint < ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }}
+
+      - name: 'Extract Repository Metadata'
+        id: repository_metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+
+      - name: 'Docker - Tag'
+        id: docker_tag
+        shell: bash
+        run: |
+          echo "TAG_CURRENT=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "TAG_LATEST=ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
+
+      - uses: ./.github/actions/build/docker
+        with:
+
+          # Required 
+          auth_token:         ${{ secrets.token }}
+          dockerfile_context: ${{ steps.dockerfile_find.outputs.DOCKERFILE_CONTEXT }} 
+          dockerfile_path:    ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }} 
+          
+          # Optional
+          docker_build_tag_current: ${{ steps.docker_tag.outputs.TAG_CURRENT }}
+          docker_build_tag_latest:  ${{ steps.docker_tag.outputs.TAG_LATEST }}
+          docker_build_labels:      ${{ steps.repository_metadata.outputs.json }}
