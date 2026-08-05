@@ -649,6 +649,9 @@ RUN \
           tree \
           iputils-ping \
     && \
+    echo "**** Extra Config ****" \
+       && git config --global credential.helper store \
+    && \
     echo "**** Cleanup ****" \
         && apt-get clean autoclean -y \
         && apt-get autoremove -y \
