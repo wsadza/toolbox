@@ -755,7 +755,8 @@ ENV \
 # Git
 ENV \
     GIT_CONFIG_DIR=${XDG_CONFIG_HOME}/git \
-    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git/gitconfig
+    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git/gitconfig \
+    GIT_EDITOR="vi"
 
 # Docker 
 ENV \
