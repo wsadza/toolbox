@@ -1,6 +1,57 @@
-name: "Release"
+name: "release"
 
+# ============================
+# Dispatchers 
+# ============================
 on:
   push:
     branches:
-      - "master"
+      - master
+
+# ============================
+# Repo permissions
+# ============================
+
+permissions:
+  contents:      write
+  pull-requests: write
+  issues:        write
+
+# ============================
+# Jobs 
+# ============================
+
+jobs:
+
+  # -------------
+  # release
+  # -------------
+  release:
+    # -- Metadata
+    name:    Semantic Release
+    runs-on: ubuntu-latest
+
+    # -- Steps
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # semantic-release needs the complete Git history and tags.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # Keep these only when they are used by your exec hooks.
+          CI_PROJECT_NAME: ${{ github.event.repository.name }}
+        run: npx semantic-release --debug

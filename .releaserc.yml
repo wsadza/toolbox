@@ -1,0 +1,119 @@
+#-----------------------------------------------------------------------------
+# Purpose:      Semanitc-Release configuration file
+# @author       ~
+# @version      ~
+#-----------------------------------------------------------------------------
+
+##############################################################################
+# Options
+# https://semantic-release.gitbook.io/semantic-release/usage/configuration#options
+
+# Continuous Integration environment verifications. This allows making releases from a local machine.
+ci: true
+
+# Output debugging information.
+debug: true
+
+# The objective of the dry-run mode is to get a preview of the pending release.
+dryRun: false
+
+##############################################################################
+# Plugins
+# https://semantic-release.gitbook.io/semantic-release/extending/plugins-list#official-plugins
+
+plugins:
+
+  # Plugin to analyze commits with conventional-changelog
+  - path: '@semantic-release/commit-analyzer'
+    present: "conventionalcommits"
+    releaseRules:
+    - { breaking: true, release: major }
+    - { type: build,    release: patch }
+    - { type: chore,    release: false }
+    - { type: ci,       release: false }
+    - { type: dep,      release: patch }
+    - { type: docs,     release: patch }
+    - { type: feat,     release: minor }
+    - { type: fix,      release: patch }
+    - { type: perf,     release: patch }
+    - { type: refactor, release: false }
+    - { type: revert,   release: patch }
+    - { type: style,    release: patch }
+    - { type: test,     release: false }
+
+#-----------------------------------------------------------------------------
+
+  # Plugin to generate changelog content with conventional-changelog
+  - path: '@semantic-release/release-notes-generator'
+    present: "conventionalcommits"
+    writerOpts:
+      groupBy:          "type"
+      commitGroupsSort: "title"
+      commitsSort:      "header"
+      headerPartial:    "# > Release {{version}} ({{date}})\n\n"
+      commitPartial:    "- {{message}} ({{hash}})\n"
+    presetConfig:
+      types:
+        - { type: 'build',    section: '> Build' }
+        - { type: 'chore',    section: '> Chores' }
+        - { type: 'ci',       section: '> CI/CD' }
+        - { type: 'dep',      section: '> Dependencies' }
+        - { type: 'docs',     section: '> Docs' }
+        - { type: 'feat',     section: '> Features' }
+        - { type: 'fix',      section: '> Fixes' }
+        - { type: 'perf',     section: '> Performance' }
+        - { type: 'refactor', section: '> Refactor' }
+        - { type: 'revert',   section: '> Reverts' }
+        - { type: 'style',    section: '> Style' }
+        - { type: 'test',     section: '> Tests' }
+
+#-----------------------------------------------------------------------------
+
+  # Plugin to create or update a changelog file.
+  - path: '@semantic-release/changelog'
+    changelogFile: 'CHANGELOG.md'        
+
+#-----------------------------------------------------------------------------
+
+  # Plugin to execute custom shell commands.
+  #- path: "@semantic-release/exec"
+  #  verifyReleaseCmd: >
+  #    source ./.hacks/bump_release.sh \
+  #    && release_hook \
+  #      "${nextRelease.version}" \
+  #      "${process.env.CI_PROJECT_NAME}"
+  #  
+  #  successCmd: >
+  #    source ./.hacks/bump_release.sh \
+  #    && post_release_hook \
+  #      "${nextRelease.version}" \
+  #      "${process.env.GITLAB_TOKEN}" \
+  #      "${nextRelease.notes}" \
+  #      "${process.env.CI_PROJECT_NAME}"
+
+#-----------------------------------------------------------------------------
+
+  # Plugin to publish a GitLab release.
+  - path: '@semantic-release/gitlab'
+    gitlabUrl: "https://gitlab-mirai.asml.com/"
+    gitlabApiPathPrefix: "/api/v4"
+
+#-----------------------------------------------------------------------------
+
+  # Plugin to commit release assets to the project's git repository.
+  - path: '@semantic-release/git'
+    assets:
+    - '*.md'
+    - 'templates/**/*.yml'
+    message: "chore(release): ${nextRelease.version} [ci-skip]\n\n${nextRelease.notes}"
+
+##############################################################################
+# VerifyConditions
+# https://semantic-release.gitbook.io/semantic-release/extending/plugins-list#official-plugins
+
+verifyConditions:
+# Verify the presence and the validity of the configuration
+- '@semantic-release/changelog'
+
+# Verify the presence and the validity of the Git authentication and release configuration
+- '@semantic-release/git'
