@@ -25,7 +25,7 @@ plugins:
 
   # Plugin to analyze commits with conventional-changelog
   - path: '@semantic-release/commit-analyzer'
-    present: "conventionalcommits"
+    preset: "conventionalcommits"
     releaseRules:
     - { breaking: true, release: major }
     - { type: build,    release: patch }
@@ -45,7 +45,7 @@ plugins:
 
   # Plugin to generate changelog content with conventional-changelog
   - path: '@semantic-release/release-notes-generator'
-    present: "conventionalcommits"
+    preset: "conventionalcommits"
     writerOpts:
       groupBy:          "type"
       commitGroupsSort: "title"
@@ -93,10 +93,8 @@ plugins:
 
 #-----------------------------------------------------------------------------
 
-  # Plugin to publish a GitLab release.
-  - path: '@semantic-release/gitlab'
-    gitlabUrl: "https://gitlab-mirai.asml.com/"
-    gitlabApiPathPrefix: "/api/v4"
+  # Plugin to publish a Github release.
+  - path: '@semantic-release/github'
 
 #-----------------------------------------------------------------------------
 
