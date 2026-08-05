@@ -61,6 +61,21 @@
 
 # Changelog
 
+## 1.0.0 (2026-08-05)
+
+
+### Features
+
+* added act; added dedicated docker and git configurations ([9c45d5e](https://github.com/wsadza/toolbox/commit/9c45d5e3308c6d72f2e2e7f6330813045e490f86))
+* changed git dir ([d10a5fe](https://github.com/wsadza/toolbox/commit/d10a5fe1b00efd57dbb476299464bdaa6e19508b))
+
+
+### Bug Fixes
+
+* added default git editor ([704d279](https://github.com/wsadza/toolbox/commit/704d279a2eb1020e2e247b8c25e81808a991f8ef))
+* corrected act.sh ([5eb4717](https://github.com/wsadza/toolbox/commit/5eb4717a1469a117c0904d8baf86d1fcf04d39ec))
+* test ([393ea8b](https://github.com/wsadza/toolbox/commit/393ea8b315cc4fa680bbe903be6ba486bd21362b))
+
 ## 1.0.0 (2026-08-04)
 
 
