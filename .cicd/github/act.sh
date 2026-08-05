@@ -8,6 +8,8 @@
 #EOF
 # ----
 
-act \
-  --secret-file /tmp/act_secrets \
-  --verbose
+act push \
+  --secret GITHUB_TOKEN="$(gh auth token)" \
+  --workflows ${PWD}/.github/workflows/release.yml \
+  --eventpath ${PWD}/.github/events/push-master.json \
+  --secret-file /tmp/act_secrets

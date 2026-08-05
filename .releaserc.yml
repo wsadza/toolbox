@@ -9,7 +9,7 @@
 # https://semantic-release.gitbook.io/semantic-release/usage/configuration#options
 
 # Continuous Integration environment verifications. This allows making releases from a local machine.
-ci: true
+ci: false 
 
 # Output debugging information.
 debug: true
@@ -44,28 +44,28 @@ plugins:
 #-----------------------------------------------------------------------------
 
   # Plugin to generate changelog content with conventional-changelog
-  - path: '@semantic-release/release-notes-generator'
-    preset: "conventionalcommits"
-    writerOpts:
-      groupBy:          "type"
-      commitGroupsSort: "title"
-      commitsSort:      "header"
-      headerPartial:    "# > Release {{version}} ({{date}})\n\n"
-      commitPartial:    "- {{message}} ({{hash}})\n"
-    presetConfig:
-      types:
-        - { type: 'build',    section: '> Build' }
-        - { type: 'chore',    section: '> Chores' }
-        - { type: 'ci',       section: '> CI/CD' }
-        - { type: 'dep',      section: '> Dependencies' }
-        - { type: 'docs',     section: '> Docs' }
-        - { type: 'feat',     section: '> Features' }
-        - { type: 'fix',      section: '> Fixes' }
-        - { type: 'perf',     section: '> Performance' }
-        - { type: 'refactor', section: '> Refactor' }
-        - { type: 'revert',   section: '> Reverts' }
-        - { type: 'style',    section: '> Style' }
-        - { type: 'test',     section: '> Tests' }
+  #- path: '@semantic-release/release-notes-generator'
+  #  preset: "conventionalcommits"
+  #  writerOpts:
+  #    groupBy:          "type"
+  #    commitGroupsSort: "title"
+  #    commitsSort:      "header"
+  #    headerPartial:    "# > Release {{version}} ({{date}})\n\n"
+  #    commitPartial:    "- {{message}} ({{hash}})\n"
+  #  presetConfig:
+  #    types:
+  #      - { type: 'build',    section: '> Build' }
+  #      - { type: 'chore',    section: '> Chores' }
+  #      - { type: 'ci',       section: '> CI/CD' }
+  #      - { type: 'dep',      section: '> Dependencies' }
+  #      - { type: 'docs',     section: '> Docs' }
+  #      - { type: 'feat',     section: '> Features' }
+  #      - { type: 'fix',      section: '> Fixes' }
+  #      - { type: 'perf',     section: '> Performance' }
+  #      - { type: 'refactor', section: '> Refactor' }
+  #      - { type: 'revert',   section: '> Reverts' }
+  #      - { type: 'style',    section: '> Style' }
+  #      - { type: 'test',     section: '> Tests' }
 
 #-----------------------------------------------------------------------------
 
@@ -99,11 +99,11 @@ plugins:
 #-----------------------------------------------------------------------------
 
   # Plugin to commit release assets to the project's git repository.
-  - path: '@semantic-release/git'
-    assets:
-    - '*.md'
-    - 'templates/**/*.yml'
-    message: "chore(release): ${nextRelease.version} [ci-skip]\n\n${nextRelease.notes}"
+  #- path: '@semantic-release/git'
+  #  assets:
+  #  - '*.md'
+  #  - 'templates/**/*.yml'
+  #  message: "chore(release): ${nextRelease.version} [ci-skip]\n\n${nextRelease.notes}"
 
 ##############################################################################
 # VerifyConditions
