@@ -40,7 +40,7 @@ jobs:
         id: dockerfile_find
         shell: bash
         run: |
-          DOCKERFILE_PATH=$(find "${PWD}/apps/kubeforge" -name "Dockerfile.alpine" -print -quit);
+          DOCKERFILE_PATH=$(find "${PWD}" -name "Dockerfile.*" -print -quit);
 
           # If no Dockerfile is found, exit with an error
           if [ -z "${DOCKERFILE_PATH}" ]; then
