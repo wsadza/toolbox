@@ -20,6 +20,7 @@ SHELL := /bin/bash
 # Files
 COMPOSE_FILE := deployments/docker-compose.yml
 CMD_COMPOSE := docker compose -f $(COMPOSE_FILE) 
+ACT_FILE := .cicd/github/act.sh
 
 ENV ?= dev
 ENV_FILE := .env.$(ENV)
@@ -51,8 +52,8 @@ start:
 	@echo "------------------------"
 	@echo " > Starting toolbox..."
 	@echo "------------------------"
-	@$(CMD_COMPOSE) --progress=plain up --build -d toolbox --force-recreate
-	#@$(CMD_COMPOSE) up --build -d toolbox --force-recreate $(ARGS)
+	#@$(CMD_COMPOSE) --progress=plain up --build -d toolbox --force-recreate
+	@$(CMD_COMPOSE) up --build -d toolbox --force-recreate $(ARGS)
 
 ############################################################
 # Run Entry Point
@@ -96,3 +97,16 @@ install:
 	@ALIAS="alias toolbox='docker exec -it -w /host\$${PWD} toolbox /bin/bash'"
 	@BASHRC="$${HOME}/.bashrc"
 	@grep -Fqx -- "$${ALIAS}" "$${BASHRC}" || echo $${ALIAS} >> $${BASHRC}
+
+############################################################
+# cicd 
+# Usage:
+#   make cicd # Test cicd logic
+############################################################
+
+.PHONY: cicd 
+cicd:
+	@echo "------------------------"
+	@echo " > Running cicd..."
+	@echo "------------------------"
+	@bash -c $(ACT_FILE)

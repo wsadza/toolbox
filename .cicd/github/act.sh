@@ -10,6 +10,7 @@
 
 act push \
   --secret GITHUB_TOKEN="$(gh auth token)" \
-  --workflows ${PWD}/.github/workflows/releasing.yml \
+  --workflows ${PWD}/.github/workflows/building.yml \
   --eventpath ${PWD}/.github/events/push-master.json \
-  --secret-file /tmp/act_secrets
+  --secret-file /tmp/act_secrets \
+  --verbose
