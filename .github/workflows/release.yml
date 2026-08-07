@@ -1,10 +1,14 @@
-name: "releasing"
+name: "release"
 
 # ============================
 # Dispatchers 
 # ============================
 on:
+# Trigger this workflow on each tag push
+
   push:
+# Specify that it should only trigger when a tag is pushed.
+# The wildcard '*' means any tag name will match.
     branches:
       - master
 

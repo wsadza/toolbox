@@ -1,5 +1,8 @@
-name: "building"
+name: "build"
 
+# ============================
+# Dispatchers 
+# ============================
 on:
 # Trigger this workflow on each tag push
 
@@ -12,9 +15,17 @@ on:
 # Allow manually triggering this workflow from the Actions tab in GitHub.
   workflow_dispatch:
 
+# ============================
+# Repo permissions
+# ============================
+
 permissions:
   contents: write
   packages: write
+
+# ============================
+# Jobs 
+# ============================
 
 jobs:
 
@@ -68,7 +79,6 @@ jobs:
         id: build_arguments
         shell: bash
         run: |
-
           buildargs=()
           while IFS= read -r line; do
             key="$(echo "$line" | sed 's/=.*//g')"

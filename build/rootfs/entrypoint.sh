@@ -68,6 +68,7 @@ run_init_scripts '/etc/cont-init.d/optional' '*.sh'
 function make_executable_scripts() {
   local directory=$1
   local script
+  local prefix=$2
 
   [[ -d "${directory}" ]] || return 0
 
