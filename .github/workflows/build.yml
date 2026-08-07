@@ -4,12 +4,11 @@ name: "build"
 # Dispatchers 
 # ============================
 on:
-  # Trigger this workflow on each tag push
   push:
     tags:
       - '*'
 
-  # Allow manually triggering this workflow from the Actions tab in GitHub.
+# Allow manually triggering this workflow from the Actions tab in GitHub.
   workflow_dispatch:
 
 # ============================
