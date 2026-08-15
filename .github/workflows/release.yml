@@ -6,7 +6,7 @@ name: "release"
 on:
   push:
     branches:
-      - master
+      - develop 
 
 # ============================
 # Repo permissions
@@ -49,6 +49,6 @@ jobs:
 
     - name: Run semantic-release
       env:
-        GITHUB_TOKEN: ${{ secrets.SEMANTIC_RELEASE_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.WORKFLOW_TOKEN }}
         CI_PROJECT_NAME: ${{ github.event.repository.name }}
       run: npx --no-install semantic-release --debug

@@ -1,6 +1,12 @@
 name: "build"
 
 # ============================
+# Parameters
+# ============================
+
+
+
+# ============================
 # Dispatchers 
 # ============================
 on:
@@ -8,7 +14,7 @@ on:
     tags:
       - '*'
 
-#  workflow_dispatch:
+  workflow_dispatch:
 
 # ============================
 # Repo permissions
@@ -57,12 +63,12 @@ jobs:
           echo "DOCKERFILE_PATH=${DOCKERFILE_PATH}" >> $GITHUB_OUTPUT
           echo "DOCKERFILE_CONTEXT=$(dirname ${DOCKERFILE_PATH})" >> $GITHUB_OUTPUT
 
-      #- name: 'Lint Dockerfile'
-      #  shell: bash
-      #  run: |
-      #    docker run --rm -i -e \
-      #      HADOLINT_IGNORE=DL3008,DL4006,SC2086,DL3003,SC1008,SC2174 \
-      #      hadolint/hadolint < ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }}
+      - name: 'Lint Dockerfile'
+        shell: bash
+        run: |
+          docker run --rm -i -e \
+            #HADOLINT_IGNORE=DL3008,DL4006,SC2086,DL3003,SC1008,SC2174 \
+            hadolint/hadolint < ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }}
 
       - name: 'Extract Repository Metadata'
         id: repository_metadata
@@ -89,11 +95,11 @@ jobs:
           echo "TAG_CURRENT=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
           echo "TAG_LATEST=ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
 
-      - uses: ./.github/actions/docker
+      - uses: ./.github/actions/docker/build
         with:
 
           # Required 
-          auth_token:         ${{ secrets.token }}
+          auth_token:         ${{ secrets.WORKFLOW_TOKEN }}
           dockerfile_context: ${{ steps.dockerfile_find.outputs.DOCKERFILE_CONTEXT }} 
           dockerfile_path:    ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }} 
           

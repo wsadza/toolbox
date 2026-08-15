@@ -21,7 +21,7 @@ ARG \
 # : Base 
 # =============================================================================
 
-FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}} AS RUNTIME
+FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}}
 
 # Build Time Arguments 
 ARG \
@@ -88,7 +88,7 @@ RUN \
         --gid "${USER_GID}" \
         --shell /bin/bash \
         --create-home \
-        --home-dir "/home/${USER_NAME}" \
+        --home-dir "/opt/home" \
         "${USER_NAME}" \
     && \
     echo "**** Base: Configure SUDO Privileges ****" \
@@ -204,11 +204,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search containerd.io \
-        && apt search docker-buildx-plugin \
-        && apt search docker-ce \
-        && apt search docker-ce-cli \
-        && apt search docker-compose-plugin \
         && apt-get install --no-install-recommends -y \
             docker-ce${DOCKER_CE_VERSION:+=${DOCKER_CE_VERSION}} \
             docker-ce-cli${DOCKER_CE_CLI_VERSION:+=${DOCKER_CE_CLI_VERSION}} \
@@ -321,7 +316,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search helm$ \
         && apt-get install --no-install-recommends -y \
           helm${HELM_VERSION:+=${HELM_VERSION}} \
     && \
@@ -367,7 +361,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search kubectl$ \
         && apt-get install --no-install-recommends -y \
           kubectl${KUBECTL_VERSION:+=${KUBECTL_VERSION}} \
     && \
@@ -413,7 +406,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search terraform$ \
         && apt-get install --no-install-recommends -y \
           terraform${TERRAFORM_VERSION:+=${TERRAFORM_VERSION}} \
     && \
@@ -462,7 +454,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search azure-cli$ \
         && apt-get install --no-install-recommends -y \
             azure-cli${AZURE_CLI_VERSION:+=${AZURE_CLI_VERSION}} \
     && \
@@ -507,7 +498,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search nodejs$  \
         && apt-get install --no-install-recommends -y \
             nodejs${NODE_JS_VERSION:+=${NODE_JS_VERSION}} \
     && \
@@ -530,38 +520,41 @@ ARG \
 RUN \
     echo "**** Core: Install Gomplate | Version: latest ****" \
     && \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-           curl \
-           jq \
-    && \
-    echo "**** Installation ****" \
-        && ARCHITECTURE="$(dpkg --print-architecture)" \
-        && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
-        && BIN_RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases/latest" | \
-               jq -r \
-               --arg ARCHITECTURE "${ARCHITECTURE}" \
-               '.assets[] \
-               | select( \
-                 .name \
-                 | contains("linux") \
-                   and contains($ARCHITECTURE) \
-               ) \
-               | .browser_download_url' \
-           )" \
-        && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
-        && chmod +x gomplate \
-        && mv gomplate /usr/bin/gomplate \
-    && \
-    echo "**** Cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*
+    if [ "${INSTALL_GOMPLATE}" = "true" ]; \
+    then \
+        echo "**** Prepare ****" \
+            && apt-get update \
+            && apt-get install --no-install-recommends -y \
+               curl \
+               jq \
+        && \
+        echo "**** Installation ****" \
+            && ARCHITECTURE="$(dpkg --print-architecture)" \
+            && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
+            && BIN_RELEASE_URL="$( \
+                 curl -fsSL "${API_URL}/releases/latest" | \
+                   jq -r \
+                   --arg ARCHITECTURE "${ARCHITECTURE}" \
+                   '.assets[] \
+                   | select( \
+                     .name \
+                     | contains("linux") \
+                       and contains($ARCHITECTURE) \
+                   ) \
+                   | .browser_download_url' \
+               )" \
+            && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
+            && chmod +x gomplate \
+            && mv gomplate /usr/bin/gomplate \
+        && \
+        echo "**** Cleanup ****" \
+            && apt-get clean autoclean -y \
+            && apt-get autoremove -y \
+            && rm -rf \
+                /var/lib/apt/lists/* \
+                /var/tmp/* \
+                /tmp/*; \
+    fi
 
 # -----------------------------------------------
 # Core: Install ACT 
@@ -573,42 +566,45 @@ ARG \
 RUN \
     echo "**** Core: Install ACT | Version: latest ****" \
     && \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-           curl \
-           jq \
-    && \
-    echo "**** Installation ****" \
-        && ARCHITECTURE="x86_64" \
-        && API_URL="https://api.github.com/repos/nektos/act" \
-        && RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases/latest" | \
-               jq -r \
-               --arg ARCHITECTURE "${ARCHITECTURE}" \
-               '.assets[] \
-               | select( \
-                 .name \
-                 | contains("Linux_x86_64") \
-                   and contains($ARCHITECTURE) \
-               ) \
-               | .browser_download_url' \
-           )" \
-        && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
-        && mkdir -p /opt/act \
-        && tar -xzf /tmp/act.tar.gz \
-            --directory=/opt/act \
-        && chmod +x /opt/act/act \
-        && ln -sf /opt/act/act /usr/local/bin/act \
-        && act --version \
-    && \
-    echo "**** Cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*
+    if [ "${INSTALL_GOMPLATE}" = "true" ]; \
+    then \
+      echo "**** Prepare ****" \
+          && apt-get update \
+          && apt-get install --no-install-recommends -y \
+             curl \
+             jq \
+      && \
+      echo "**** Installation ****" \
+          && ARCHITECTURE="x86_64" \
+          && API_URL="https://api.github.com/repos/nektos/act" \
+          && RELEASE_URL="$( \
+               curl -fsSL "${API_URL}/releases/latest" | \
+                 jq -r \
+                 --arg ARCHITECTURE "${ARCHITECTURE}" \
+                 '.assets[] \
+                 | select( \
+                   .name \
+                   | contains("Linux_x86_64") \
+                     and contains($ARCHITECTURE) \
+                 ) \
+                 | .browser_download_url' \
+             )" \
+          && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
+          && mkdir -p /opt/act \
+          && tar -xzf /tmp/act.tar.gz \
+              --directory=/opt/act \
+          && chmod +x /opt/act/act \
+          && ln -sf /opt/act/act /usr/local/bin/act \
+          && act --version \
+      && \
+      echo "**** Cleanup ****" \
+          && apt-get clean autoclean -y \
+          && apt-get autoremove -y \
+          && rm -rf \
+              /var/lib/apt/lists/* \
+              /var/tmp/* \
+              /tmp/*; \
+    fi
 
 # -----------------------------------------------
 # Core: Miscellaneous
@@ -668,20 +664,23 @@ RUN \
 # ~ if arg is NON empty add --version
 
 ARG \
-    TREE_SITTER_CLI=
+    CARGO_TREE_SITTER_CLI=0.26.11 \
+    NPM_NEOVIM=5.4.0 \
+    NPM_OPENCODE_AI=1.18.13 \
+    PIPX_UV=0.12.1
 
 RUN \
     echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
     && \
         echo "**** Install extra python packages ****" \
-              && pipx install --global uv \
+              && pipx install --global uv${PIPX_UV:+==${PIPX_UV}} \
         && \
         if [ "${INSTALL_NODE_JS}" = "true" ]; \
         then \
         echo "**** Install extra node packages ****" \
               && npm install --global \
-                  opencode-ai \
-                  neovim \
+                  opencode-ai@${NPM_OPENCODE_AI} \
+                  neovim@${NPM_NEOVIM} \
               && npm cache clean --force; \
         fi \
         && \
@@ -691,7 +690,7 @@ RUN \
                   tree-sitter-cli \
                   --locked \
                   --root /usr/local \
-                  ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} \
+                  ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}} \
     && \
     echo "**** Clean installation caches ****" \
         && python3 -m pip cache purge
@@ -707,7 +706,7 @@ RUN \
 ENV \
     SHELL=/bin/bash \
     TERM=xterm-256color \ 
-    HOME=/home/${USER_NAME}
+    HOME=/opt/home
 
 ENV \
     XDG_ROOT=/opt/toolbox
@@ -773,6 +772,17 @@ ENV \
 # : Postflight 
 # =============================================================================
 
+ARG TOOLBOX_GROUP=toolbox
+ARG TOOLBOX_GID=2000
+
+RUN groupadd \
+        --gid "${TOOLBOX_GID}" \
+        "${TOOLBOX_GROUP}" \
+    && usermod \
+        --append \
+        --groups "${TOOLBOX_GROUP}" \
+        "${USER_NAME}"
+
 # -----------------------------------------------
 # Postflight: Create workspace targets 
 #
@@ -782,8 +792,8 @@ RUN \
     && \
     install -d \
         -o "${USER_UID}" \
-        -g "${USER_GID}" \
-        -m 0755 \
+        -g "${TOOLBOX_GID}" \
+        -m 2775 \
         \
         "${XDG_CONFIG_HOME}" \
         "${XDG_DATA_HOME}" \
@@ -791,7 +801,6 @@ RUN \
         "${XDG_CACHE_HOME}" \
         \
         "${NPM_CONFIG_CACHE}" \
-        "${NPM_CONFIG_USERCONFIG}" \
         \
         "${GOPATH}" \
         "${GOCACHE}" \
@@ -810,14 +819,20 @@ RUN \
     && \
     install -d \
         -o "${USER_UID}" \
-        -g "${USER_GID}" \
-        -m 0700 \
+        -g "${TOOLBOX_GID}" \
+        -m 2770 \
         "${XDG_RUNTIME_DIR}" \
+    && \
+    install -d \
+        -o "${USER_UID}" \
+        -g "${TOOLBOX_GID}" \
+        -m 2775 \
+        "$(dirname "${NPM_CONFIG_USERCONFIG}")" \
     && \
     install \
         -o "${USER_UID}" \
-        -g "${USER_GID}" \
-        -m 0644 \
+        -g "${TOOLBOX_GID}" \
+        -m 0664 \
         /dev/null \
         "${NPM_CONFIG_USERCONFIG}"
 
@@ -832,11 +847,11 @@ USER ${USER_NAME}
 # Postflight: Copy overlay and change owner 
 
 COPY \
-    --chown=${USER_UID}:${USER_GID} \
+    --chown=${USER_UID}:${TOOLBOX_GID} \
     rootfs / 
 
 COPY \
-    --chown=${USER_UID}:${USER_GID} \
+    --chown=root:root \
     --chmod=0755 \
     rootfs/entrypoint.sh /entrypoint.sh
 
@@ -862,10 +877,11 @@ RUN \
 # =============================================================================
 
 # Switch to non-root user.
-USER ${USER_NAME}
+#USER ${USER_NAME}
+USER root
 
 # Set working target
-WORKDIR ${HOME} 
+#WORKDIR ${HOME} 
 
 # Set entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

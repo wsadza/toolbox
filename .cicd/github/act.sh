@@ -5,12 +5,13 @@
 #cat << EOF > /tmp/act_secrets
 #GITHUB_TOKEN=""
 #TOKEN=""
+#SEMANTIC_RELEASE_TOKEN=""
 #EOF
 # ----
 
 act push \
-  --secret GITHUB_TOKEN="$(gh auth token)" \
-  --workflows ${PWD}/.github/workflows/building.yml \
-  --eventpath ${PWD}/.github/events/push-master.json \
-  --secret-file /tmp/act_secrets \
-  --verbose
+  --action-offline-mode \
+  --secret WORKFLOW_TOKEN="$(gh auth token)" \
+  --workflows ${PWD}/.github/workflows/build.yml
+#  --eventpath ${PWD}/.github/events/push-master.json \
+#  --secret-file /tmp/act_secrets

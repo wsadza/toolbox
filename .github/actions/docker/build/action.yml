@@ -1,4 +1,4 @@
-# github.yml 
+# action.yml 
 name: building_docker_github
 description: ''
 
@@ -95,6 +95,7 @@ runs:
           echo \
             docker buildx build \
               ${docker_build_arguments} \
+              --load \
               --tag dummy \
               --file ${dockerfile_path} \
               .

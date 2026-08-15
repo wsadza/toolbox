@@ -58,6 +58,18 @@ start:
 ############################################################
 # Run Entry Point
 # Usage:
+#   make build # Run the application
+#   make run APP_NAME=<app> # Run a specyfic application 
+############################################################
+
+.PHONY: build
+build:
+	@$(LOAD_ENV)
+	@$(CMD_COMPOSE) build $(ARGS)
+
+############################################################
+# Run Entry Point
+# Usage:
 #   make run               	# Run the application
 #   make run APP_NAME=<app> # Run a specyfic application 
 ############################################################
@@ -94,7 +106,7 @@ install:
 	@echo "------------------------"
 	@echo " > Install toolbox..."
 	@echo "------------------------"
-	@ALIAS="alias toolbox='docker exec -it -w /host\$${PWD} toolbox /bin/bash'"
+	@ALIAS="alias toolbox='docker exec -it --user monke --workdir /host\$${PWD} toolbox /bin/bash'"
 	@BASHRC="$${HOME}/.bashrc"
 	@grep -Fqx -- "$${ALIAS}" "$${BASHRC}" || echo $${ALIAS} >> $${BASHRC}
 
