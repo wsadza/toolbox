@@ -881,7 +881,7 @@ RUN \
 USER root
 
 # Set working target
-#WORKDIR ${HOME} 
+WORKDIR ${HOME} 
 
 # Set entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

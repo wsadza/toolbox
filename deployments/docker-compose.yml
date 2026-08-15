@@ -18,7 +18,6 @@ services:
     hostname:       toolbox 
     container_name: toolbox 
     image:          toolbox
-    working_dir:    /host
     restart:        unless-stopped
 
     # =============================================================================
