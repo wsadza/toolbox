@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: |
           docker run --rm -i -e \
-            #HADOLINT_IGNORE=DL3008,DL4006,SC2086,DL3003,SC1008,SC2174 \
+            HADOLINT_IGNORE=DL3008,DL4006,SC2086,DL3003,SC1008,SC2174 \
             hadolint/hadolint < ${{ steps.dockerfile_find.outputs.DOCKERFILE_PATH }}
 
       - name: 'Extract Repository Metadata'

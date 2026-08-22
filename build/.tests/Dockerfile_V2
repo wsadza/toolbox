@@ -23,7 +23,7 @@ ARG \
 # : Base 
 # =============================================================================
 
-FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}}
+FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}} AS toolbox-common
 
 # Build Time Arguments 
 ARG \
@@ -394,7 +394,7 @@ RUN \
 
 ARG \
     INSTALL_AZURE_CLI="false" \
-    AZURE_CLI_SUITE="bookworm" \
+    AZURE_CLI_SUITE="bullseye" \
     AZURE_CLI_VERSION="" 
 
 RUN \
@@ -418,7 +418,7 @@ RUN \
           'Types: deb' \
           'URIs: https://packages.microsoft.com/repos/azure-cli/' \
           "Suites: ${AZURE_CLI_SUITE}" \
-          'Components: main' \
+          'Components: stable' \
           "Architectures: $(dpkg --print-architecture)" \
           'Signed-By: /etc/apt/keyrings/microsoft.asc' \
          > /etc/apt/sources.list.d/microsoft.azure-cli.sources \
@@ -427,9 +427,6 @@ RUN \
         && apt-get update \
         && apt-get install --no-install-recommends -y \
             azure-cli${AZURE_CLI_VERSION:+=${AZURE_CLI_VERSION}} \
-        && test -x /opt/az/bin/python3 \
-        && /opt/az/bin/python3 --version \
-        && az version \
     && \
     echo "**** Section cleanup ****" \
         && apt-get clean autoclean -y \
@@ -740,222 +737,249 @@ ENV \
     PATH=${TOOLBOX_BIN}:${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}
 
 # =============================================================================
-# : Postflight
+# : Postflight — common image
 # =============================================================================
 
-# -----------------------------------------------
-# Postflight: Create toolbox filesystem
-# -----------------------------------------------
-
-RUN \
-    echo "**** Postflight: Create toolbox filesystem ****" \
-    && install \
-        -d \
+# Establish stable shared policy roots. Anything created normally below these
+# directories inherits the shared group/default ACL.
+RUN set -eux; \
+    for directory in \
+        "${TOOLBOX_ROOT}" \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}"; \
+    do \
+        install -d \
+            -o root \
+            -g toolbox-shared \
+            -m 2775 \
+            "${directory}"; \
+        setfacl \
+            -m g:toolbox-shared:rwx \
+            -m m::rwx \
+            -m d:g:toolbox-shared:rwx \
+            -m d:m::rwx \
+            "${directory}"; \
+    done; \
+    \
+    install -d \
         -o root \
         -g root \
         -m 0755 \
-        "${TOOLBOX_ROOT}" \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_RUNTIME_ROOT}"; \
-    \
-    echo "**** Postflight: Create shared workspace targets ****" \
-    && install \
-        -d \
-        -o root \
-        -g toolbox-shared \
-        -m 2775 \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        "${NPM_CONFIG_CACHE}" \
-        "${GOPATH}" \
-        "${GOCACHE}" \
-        "${GOMODCACHE}" \
-        "${CARGO_HOME}" \
-        "${CARGO_TARGET_DIR}" \
-        "${RUSTUP_HOME}" \
-        "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}"; \
-    \
-    echo "**** Postflight: Create shared workspace targets ****" \
-    && install \
-        -d \
-        -o root \
-        -g toolbox-shared \
-        -m 2775 \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        "${NPM_CONFIG_CACHE}" \
-        "${GOPATH}" \
-        "${GOCACHE}" \
-        "${GOMODCACHE}" \
-        "${CARGO_HOME}" \
-        "${CARGO_TARGET_DIR}" \
-        "${RUSTUP_HOME}" \
-        "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}" \
-    && setfacl \
-        -m g:toolbox-shared:rwx \
-        -m d:g:toolbox-shared:rwx \
-        -m d:m:rwx \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        "${NPM_CONFIG_CACHE}" \
-        "${GOPATH}" \
-        "${GOCACHE}" \
-        "${GOMODCACHE}" \
-        "${CARGO_HOME}" \
-        "${CARGO_TARGET_DIR}" \
-        "${RUSTUP_HOME}" \
-        "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}"
+        "${TOOLBOX_RUNTIME_ROOT}"
 
 # -----------------------------------------------
-# Postflight: Python, npm, and Cargo packages
+# Install shared tools
 # -----------------------------------------------
 
 ARG \
-    CARGO_TREE_SITTER_CLI=0.26.11 \
-    NPM_NEOVIM=5.4.0 \
-    NPM_OPENCODE_AI=1.18.13 \
-    PIPX_UV=0.12.1
+  NPM_OPENCODE_AI="" \
+  NPM_NEOVIM=""
 
-RUN \
-    echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
-    && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
-    && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
-    && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
-    && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
-    && umask 0002 \
-    && echo "**** Install extra Python packages ****" \
-    && pipx install \
-        --global \
-        "uv${PIPX_UV:+==${PIPX_UV}}" \
-    && if [ "${INSTALL_NODE_JS}" = "true" ]; then \
-        echo "**** Install extra Node packages ****" \
-        && npm install \
-            --global \
-            "opencode-ai@${NPM_OPENCODE_AI}" \
-            "neovim@${NPM_NEOVIM}" \
-        && npm cache clean --force; \
-    fi \
-    && echo "**** Install extra Cargo packages ****" \
-    && rustup default stable \
-    && cargo install \
+RUN set -eux; \
+    umask 0002; \
+    \
+    export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}"; \
+    export XDG_DATA_HOME="${TOOLBOX_DATA}"; \
+    export XDG_STATE_HOME="${TOOLBOX_STATE}"; \
+    export XDG_CACHE_HOME="${TOOLBOX_CACHE}"; \
+    \
+    pipx install --global \
+        uv${PIPX_UV:+==${PIPX_UV}}; \
+    \
+    if [ "${INSTALL_NODE_JS}" = "true" ]; then \
+        npm install --global \
+            opencode-ai${NPM_OPENCODE_AI:+@${NPM_OPENCODE_AI}} \
+            neovim${NPM_NEOVIM:+@${NPM_NEOVIM}}; \
+        npm cache clean --force; \
+    fi; \
+    \
+    rustup default stable; \
+    \
+    cargo install \
         tree-sitter-cli \
         --locked \
         --root /usr/local \
-        ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}} \
-    && echo "**** Clean installation caches ****" \
-    && python3 -m pip cache purge
+        ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}}; \
+    \
+    python3 -m pip cache purge
 
-# -----------------------------------------------
-# Postflight: Copy overlays
-# -----------------------------------------------
+# =============================================================================
+# : Root filesystem overlay
+# =============================================================================
+
+# Do not use:
+#
+# COPY --chown=root:toolbox-shared rootfs/ /
+#
+# It can replace ownership and modes on existing system directories such as
+# /usr, /etc and /opt.
+
+# Root-owned executable files.
+COPY \
+    --chown=root:root \
+    --chmod=0755 \
+    rootfs/entrypoint.sh \
+    /entrypoint.sh
 
 COPY \
-    rootfs/ /
+    --chown=root:root \
+    --chmod=0755 \
+    rootfs/usr/bin/toolbox.sh \
+    /usr/bin/toolbox.sh
 
-# -----------------------------------------------
-# Postflight: Configure overlay permissions
-# -----------------------------------------------
+# Root-owned global Bash configuration.
+COPY \
+    --chown=root:root \
+    rootfs/etc/bash.bashrc.d/ \
+    /etc/bash.bashrc.d/
 
-RUN \
-    chmod 0755 \
-        /entrypoint.sh \
-        /usr/bin/toolbox.sh
+# Shared toolbox configuration.
+COPY \
+    --chown=root:toolbox-shared \
+    rootfs/opt/toolbox/config/ \
+    /opt/toolbox/config/
 
-# -----------------------------------------------
-# Postflight: Install Neovim plugins
-# -----------------------------------------------
+# Shared Neovim wrapper.
+COPY \
+    --chown=root:toolbox-shared \
+    --chmod=0775 \
+    rootfs/opt/toolbox/bin/vi \
+    /opt/toolbox/bin/vi
 
-RUN \
-    echo "**** Fetch Neovim Plugins | ${INSTALL_NEOVIM} ****" \
-    && umask 0002 \
-    && if [ "${INSTALL_NEOVIM}" = "true" ]; then \
-        echo "**** Fetch Neovim Plugins ****" \
-            && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
-            && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
-            && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
-            && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
-            && /usr/local/bin/vi \
-                --headless \
-                "+Lazy! sync" \
-                "+MasonToolsInstallSync" \
-                +qa \
-        && \
-        echo "**** Clean Neovim cache ****" \
-            && rm -rf -- "${TOOLBOX_CACHE:?}/nvim"; \
-    fi
-
-# -----------------------------------------------
-# Postflight: Clear build caches
-# -----------------------------------------------
-
-RUN \
-    echo "**** Postflight: Clear toolbox caches ****" \
-    && test "${TOOLBOX_CACHE}" = "/opt/toolbox/cache" \
-    && rm -rf -- "${TOOLBOX_CACHE}" \
-    && install \
-        -d \
+# Normalize the two small copied trees. These remain inexpensive even when
+# additional configuration fragments are introduced.
+RUN set -eux; \
+    \
+    install -d \
+        -o root \
+        -g root \
+        -m 0755 \
+        /etc/bash.bashrc.d; \
+    \
+    find /etc/bash.bashrc.d \
+        -xdev \
+        -type d \
+        -exec chown root:root {} + \
+        -exec chmod 0755 {} +; \
+    \
+    find /etc/bash.bashrc.d \
+        -xdev \
+        -type f \
+        -exec chown root:root {} + \
+        -exec chmod 0644 {} +; \
+    \
+    install -d \
         -o root \
         -g toolbox-shared \
         -m 2775 \
-        "${TOOLBOX_CACHE}" \
-    && setfacl \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_BIN}"; \
+    \
+    setfacl \
         -m g:toolbox-shared:rwx \
+        -m m::rwx \
         -m d:g:toolbox-shared:rwx \
-        -m d:m:rwx \
-        "${TOOLBOX_CACHE}"
-
-# -----------------------------------------------
-# Postflight: Finalize user-writable targets
-# -----------------------------------------------
-
-RUN \
-    echo "**** Finalize shared toolbox permissions ****" \
-    && chgrp -R toolbox-shared \
+        -m d:m::rwx \
         "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-    && chmod -R g+rwX \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-    && find \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
+        "${TOOLBOX_BIN}"; \
+    \
+    find "${TOOLBOX_CONFIG}" \
         -xdev \
         -type d \
-        -exec chmod g+s {} + \
+        -exec chgrp toolbox-shared {} + \
+        -exec chmod 2775 {} + \
         -exec setfacl \
             -m g:toolbox-shared:rwx \
+            -m m::rwx \
             -m d:g:toolbox-shared:rwx \
-            -m d:m:rwx \
-            {} + \
-    && find "${TOOLBOX_BIN}" \
+            -m d:m::rwx \
+            {} +; \
+    \
+    find "${TOOLBOX_CONFIG}" \
         -xdev \
         -type f \
-        -exec chmod g+x {} +
+        -exec chgrp toolbox-shared {} + \
+        -exec chmod g+rw {} +
 
 # =============================================================================
-# : Execute
+# : Neovim builder
 # =============================================================================
 
-WORKDIR \
-    /
+FROM toolbox-common AS nvim-builder
 
-ENTRYPOINT \
-    ["/entrypoint.sh"]
+ARG INSTALL_NEOVIM="false"
+
+# Only the exported application data root is named here. Lazy, Mason,
+# Treesitter and other plugins manage their own descendants.
+RUN set -eux; \
+    install -d \
+        -o root \
+        -g toolbox-shared \
+        -m 2775 \
+        "${TOOLBOX_DATA}/nvim"; \
+    \
+    setfacl \
+        -m g:toolbox-shared:rwx \
+        -m m::rwx \
+        -m d:g:toolbox-shared:rwx \
+        -m d:m::rwx \
+        "${TOOLBOX_DATA}/nvim"; \
+    \
+    umask 0002; \
+    \
+    if [ "${INSTALL_NEOVIM}" = "true" ]; then \
+        "${TOOLBOX_BIN}/vi" \
+            --headless \
+            "+Lazy! sync" \
+            +qa; \
+        \
+        "${TOOLBOX_BIN}/vi" \
+            --headless \
+            "+MasonToolsInstallSync" \
+            +qa; \
+    fi
+
+# =============================================================================
+# : Final image
+# =============================================================================
+
+FROM toolbox-common AS final
+
+# This copy both exports and normalizes the potentially large Neovim tree.
+COPY \
+    --from=nvim-builder \
+    --chown=root:toolbox-shared \
+    --chmod=u=rwX,g=rwX,o=rX \
+    /opt/toolbox/share/nvim/ \
+    /opt/toolbox/share/nvim/
+
+# Verify that system libraries remain accessible after dropping root.
+RUN setpriv \
+    --reuid=65534 \
+    --regid=65534 \
+    --clear-groups \
+    /bin/bash -c ':'
+
+# Mason staging is ephemeral runtime data and should not be inherited
+# from the root-owned build process.
+RUN set -eux; \
+    install -d \
+        -o root \
+        -g toolbox-shared \
+        -m 2775 \
+        "${TOOLBOX_DATA}"; \
+    \
+    setfacl \
+        -m g:toolbox-shared:rwx \
+        -m m::rwx \
+        -m d:g:toolbox-shared:rwx \
+        -m d:m::rwx \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_DATA}"
+
+WORKDIR /
+
+ENTRYPOINT ["/entrypoint.sh"]

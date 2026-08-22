@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+exec env \
+    XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
+    XDG_DATA_HOME="${TOOLBOX_DATA}" \
+    XDG_STATE_HOME="${TOOLBOX_STATE}" \
+    XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
+    /usr/local/bin/vi "$@"

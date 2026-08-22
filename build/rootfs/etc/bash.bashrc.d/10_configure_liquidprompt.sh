@@ -1,8 +1,6 @@
-#!/bin/bash
-
 # -----------------------------------
 # This file is sourced by interactive Bash shells only.
-#
+# -----------------------------------
 
 LIQUIDPROMPT_DIR=/usr/share/liquidprompt
 

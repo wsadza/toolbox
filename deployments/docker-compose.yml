@@ -4,7 +4,7 @@
 # ----------------------------------------------------------
 #
 # FILE: ./deployments/docker-compose.yml
-# DESC: 
+# DESC: Docker compose building definition 
 #
 ############################################################
 
@@ -24,13 +24,13 @@ services:
     # : Volumes
     # =============================================================================
     volumes:
-      # Make host files available at identical absolute paths.
+      # Host home paths are identical inside toolbox.
+      - /home:/home
+
+      # Full host filesystem escape hatch.
       - /:/host
 
-      # Mount host home
-      - ${HOME}:/opt/home
-
-      # Mount Docker Socket
+      # Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
 
     # =============================================================================
@@ -45,11 +45,6 @@ services:
         DISTRIBUTION:           ${DISTRIBUTION}
         SUITE:                  ${SUITE}
         DIGEST:                 ${DIGEST}
-
-        # -- User
-        USER_NAME:              ${USER_NAME}
-        USER_UID:               ${USER_UID}
-        DOCKER_GID:             ${DOCKER_GID}
 
         # -- Neovim
         INSTALL_NEOVIM:         ${INSTALL_NEOVIM}
@@ -96,7 +91,7 @@ services:
         # -- Extra packages (python; node; cargo)
         CARGO_TREE_SITTER_CLI:  ${CARGO_TREE_SITTER_CLI}
         NPM_NEOVIM:             ${NPM_NEOVIM}
-        NOM_OPENCODE-AI:        ${NPM_OPENCODE-AI}
+        NPM_OPENCODE_AI:        ${NPM_OPENCODE_AI}
         PIPX_UV:                ${PIPX_UV}
 
     # =============================================================================

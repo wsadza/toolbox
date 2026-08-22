@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.14
-
 ############################################################
 # Copyright (c) 2026 Igor Sadza 
 # Released under the GPLv3 license
@@ -394,7 +392,7 @@ RUN \
 
 ARG \
     INSTALL_AZURE_CLI="false" \
-    AZURE_CLI_SUITE="bookworm" \
+    AZURE_CLI_SUITE="bullseye" \
     AZURE_CLI_VERSION="" 
 
 RUN \
@@ -418,7 +416,7 @@ RUN \
           'Types: deb' \
           'URIs: https://packages.microsoft.com/repos/azure-cli/' \
           "Suites: ${AZURE_CLI_SUITE}" \
-          'Components: main' \
+          'Components: stable' \
           "Architectures: $(dpkg --print-architecture)" \
           'Signed-By: /etc/apt/keyrings/microsoft.asc' \
          > /etc/apt/sources.list.d/microsoft.azure-cli.sources \
@@ -427,9 +425,6 @@ RUN \
         && apt-get update \
         && apt-get install --no-install-recommends -y \
             azure-cli${AZURE_CLI_VERSION:+=${AZURE_CLI_VERSION}} \
-        && test -x /opt/az/bin/python3 \
-        && /opt/az/bin/python3 --version \
-        && az version \
     && \
     echo "**** Section cleanup ****" \
         && apt-get clean autoclean -y \
@@ -756,8 +751,13 @@ RUN \
         -m 0755 \
         "${TOOLBOX_ROOT}" \
         "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_RUNTIME_ROOT}"; \
-    \
+        "${TOOLBOX_RUNTIME_ROOT}"
+
+# -----------------------------------------------
+# Postflight: Create shared writable targets
+# -----------------------------------------------
+
+RUN \
     echo "**** Postflight: Create shared workspace targets ****" \
     && install \
         -d \
@@ -776,8 +776,13 @@ RUN \
         "${CARGO_TARGET_DIR}" \
         "${RUSTUP_HOME}" \
         "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}"; \
-    \
+        "${UV_CACHE_DIR}"
+
+# -----------------------------------------------
+# Postflight: Create shared writable targets
+# -----------------------------------------------
+
+RUN \
     echo "**** Postflight: Create shared workspace targets ****" \
     && install \
         -d \
@@ -868,7 +873,11 @@ COPY \
 RUN \
     chmod 0755 \
         /entrypoint.sh \
-        /usr/bin/toolbox.sh
+        /usr/bin/toolbox.sh \
+    && chown -R root:root \
+        "${TOOLBOX_CONFIG}" \
+    && chmod -R go-w \
+        "${TOOLBOX_CONFIG}"
 
 # -----------------------------------------------
 # Postflight: Install Neovim plugins
@@ -886,10 +895,12 @@ RUN \
             && /usr/local/bin/vi \
                 --headless \
                 "+Lazy! sync" \
+                +qa \
+            && /usr/local/bin/vi \
+                --headless \
                 "+MasonToolsInstallSync" \
                 +qa \
-        && \
-        echo "**** Clean Neovim cache ****" \
+        && echo "**** Clean Neovim cache ****" \
             && rm -rf -- "${TOOLBOX_CACHE:?}/nvim"; \
     fi
 
@@ -914,41 +925,31 @@ RUN \
         "${TOOLBOX_CACHE}"
 
 # -----------------------------------------------
-# Postflight: Finalize user-writable targets
+# Postflight: Finalize shared permissions
 # -----------------------------------------------
 
-RUN \
-    echo "**** Finalize shared toolbox permissions ****" \
-    && chgrp -R toolbox-shared \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-    && chmod -R g+rwX \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-    && find \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        -xdev \
-        -type d \
-        -exec chmod g+s {} + \
-        -exec setfacl \
-            -m g:toolbox-shared:rwx \
-            -m d:g:toolbox-shared:rwx \
-            -m d:m:rwx \
-            {} + \
-    && find "${TOOLBOX_BIN}" \
-        -xdev \
-        -type f \
-        -exec chmod g+x {} +
+#RUN \
+#    echo "**** Postflight: Finalize shared toolbox permissions ****" \
+#    && find \
+#        "${TOOLBOX_DATA}" \
+#        "${TOOLBOX_STATE}" \
+#        "${TOOLBOX_CACHE}" \
+#        "${TOOLBOX_BIN}" \
+#        -xdev \
+#        \( -type d -o -type f \) \
+#        -exec chgrp toolbox-shared {} + \
+#        \( \
+#            -type d \
+#                -exec chmod g+rws {} + \
+#                -exec setfacl \
+#                    -m g:toolbox-shared:rwx \
+#                    -m d:g:toolbox-shared:rwx \
+#                    -m d:m:rwx \
+#                    {} + \
+#            -o \
+#            -type f \
+#                -exec chmod g+rwX {} + \
+#        \)
 
 # =============================================================================
 # : Execute

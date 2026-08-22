@@ -323,6 +323,14 @@ require("lazy").setup({
 		dependencies = {
 			"nvim-tree/nvim-web-devicons",
 		},
+    lazy = false,
+    init = function()
+      vim.api.nvim_create_autocmd("VimEnter", {
+        callback = function()
+          vim.cmd("NvimTreeOpen")
+        end,
+      })
+    end,
 		keys = {
 			{
 				"<leader>e",
@@ -538,8 +546,8 @@ require("lazy").setup({
     "mason-org/mason.nvim",
 		cmd = "Mason",
 		build = ":MasonUpdate",
-		opts = {},
-	},
+    opts = {},
+  },
 
   {
     "mason-org/mason-lspconfig.nvim",

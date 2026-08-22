@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.14
-
 ############################################################
 # Copyright (c) 2026 Igor Sadza 
 # Released under the GPLv3 license
@@ -394,7 +392,7 @@ RUN \
 
 ARG \
     INSTALL_AZURE_CLI="false" \
-    AZURE_CLI_SUITE="bookworm" \
+    AZURE_CLI_SUITE="bullseye" \
     AZURE_CLI_VERSION="" 
 
 RUN \
@@ -418,7 +416,7 @@ RUN \
           'Types: deb' \
           'URIs: https://packages.microsoft.com/repos/azure-cli/' \
           "Suites: ${AZURE_CLI_SUITE}" \
-          'Components: main' \
+          'Components: stable' \
           "Architectures: $(dpkg --print-architecture)" \
           'Signed-By: /etc/apt/keyrings/microsoft.asc' \
          > /etc/apt/sources.list.d/microsoft.azure-cli.sources \
@@ -427,9 +425,6 @@ RUN \
         && apt-get update \
         && apt-get install --no-install-recommends -y \
             azure-cli${AZURE_CLI_VERSION:+=${AZURE_CLI_VERSION}} \
-        && test -x /opt/az/bin/python3 \
-        && /opt/az/bin/python3 --version \
-        && az version \
     && \
     echo "**** Section cleanup ****" \
         && apt-get clean autoclean -y \
@@ -646,10 +641,9 @@ ENV \
     TOOLBOX_SHARED_GID=${TOOLBOX_SHARED_GID}
 
 RUN \
-    echo "**** Config: User & Groups  ****" \
-        && groupadd \
-            --gid "${TOOLBOX_SHARED_GID}" \
-            toolbox-shared
+    groupadd \
+        --gid "${TOOLBOX_SHARED_GID}" \
+        toolbox-shared
 
 # -----------------------------------------------
 # Config: Base
@@ -756,68 +750,44 @@ RUN \
         -m 0755 \
         "${TOOLBOX_ROOT}" \
         "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_RUNTIME_ROOT}"; \
-    \
+        "${TOOLBOX_RUNTIME_ROOT}"
+
+# -----------------------------------------------
+# Postflight: Create shared writable targets
+# -----------------------------------------------
+
+RUN \
     echo "**** Postflight: Create shared workspace targets ****" \
     && install \
         -d \
         -o root \
         -g toolbox-shared \
         -m 2775 \
+        \
         "${TOOLBOX_DATA}" \
         "${TOOLBOX_STATE}" \
         "${TOOLBOX_CACHE}" \
         "${TOOLBOX_BIN}" \
+        \
         "${NPM_CONFIG_CACHE}" \
+        \
         "${GOPATH}" \
         "${GOCACHE}" \
         "${GOMODCACHE}" \
+        \
         "${CARGO_HOME}" \
         "${CARGO_TARGET_DIR}" \
         "${RUSTUP_HOME}" \
-        "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}"; \
-    \
-    echo "**** Postflight: Create shared workspace targets ****" \
-    && install \
-        -d \
-        -o root \
-        -g toolbox-shared \
-        -m 2775 \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        "${NPM_CONFIG_CACHE}" \
-        "${GOPATH}" \
-        "${GOCACHE}" \
-        "${GOMODCACHE}" \
-        "${CARGO_HOME}" \
-        "${CARGO_TARGET_DIR}" \
-        "${RUSTUP_HOME}" \
-        "${UV_TOOL_DIR}" \
-        "${UV_CACHE_DIR}" \
-    && setfacl \
-        -m g:toolbox-shared:rwx \
-        -m d:g:toolbox-shared:rwx \
-        -m d:m:rwx \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        "${NPM_CONFIG_CACHE}" \
-        "${GOPATH}" \
-        "${GOCACHE}" \
-        "${GOMODCACHE}" \
-        "${CARGO_HOME}" \
-        "${CARGO_TARGET_DIR}" \
-        "${RUSTUP_HOME}" \
+        \
         "${UV_TOOL_DIR}" \
         "${UV_CACHE_DIR}"
 
 # -----------------------------------------------
-# Postflight: Python, npm, and Cargo packages
+# Postflight: Python & NPM & Cargo packages 
 # -----------------------------------------------
+
+# ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} 
+# ~ if arg is NON empty add --version
 
 ARG \
     CARGO_TREE_SITTER_CLI=0.26.11 \
@@ -827,32 +797,77 @@ ARG \
 
 RUN \
     echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
-    && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
-    && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
-    && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
-    && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
-    && umask 0002 \
-    && echo "**** Install extra Python packages ****" \
-    && pipx install \
-        --global \
-        "uv${PIPX_UV:+==${PIPX_UV}}" \
-    && if [ "${INSTALL_NODE_JS}" = "true" ]; then \
-        echo "**** Install extra Node packages ****" \
-        && npm install \
-            --global \
-            "opencode-ai@${NPM_OPENCODE_AI}" \
-            "neovim@${NPM_NEOVIM}" \
-        && npm cache clean --force; \
-    fi \
-    && echo "**** Install extra Cargo packages ****" \
-    && rustup default stable \
-    && cargo install \
-        tree-sitter-cli \
-        --locked \
-        --root /usr/local \
-        ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}} \
-    && echo "**** Clean installation caches ****" \
-    && python3 -m pip cache purge
+    && \
+        echo "**** Set config ****" \
+            && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
+            && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
+            && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
+            && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
+        && \
+        echo "**** Install extra python packages ****" \
+            && pipx install --global uv${PIPX_UV:+==${PIPX_UV}} \
+        && \
+        if [ "${INSTALL_NODE_JS}" = "true" ]; \
+        then \
+        echo "**** Install extra node packages ****" \
+              && npm install --global \
+                  opencode-ai@${NPM_OPENCODE_AI} \
+                  neovim@${NPM_NEOVIM} \
+              && npm cache clean --force; \
+        fi \
+        && \
+        echo "**** Install extra cargo packages ****" \
+              && rustup default stable \
+              && cargo install \
+                  tree-sitter-cli \
+                  --locked \
+                  --root /usr/local \
+                  ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}} \
+    && \
+    echo "**** Clean installation caches ****" \
+        && python3 -m pip cache purge
+
+# =============================================================================
+# : User Space
+# =============================================================================
+
+# -----------------------------------------------
+# Postflight: Configure shared workspace permissions
+# -----------------------------------------------
+
+RUN \
+    echo "**** Postflight: Configure shared workspace permissions ****" \
+    && chgrp -R toolbox-shared \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+    && chmod -R g+rwX \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+    && find "${TOOLBOX_BIN}" \
+        -type f \
+        -exec chmod g+x {} + \
+    && find \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+        -type d \
+        -exec chmod g+s {} + \
+    && find \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+        -type d \
+        -exec setfacl \
+            -m g:toolbox-shared:rwx \
+            -m d:g:toolbox-shared:rwx \
+            -m d:m:rwx \
+            {} +
 
 # -----------------------------------------------
 # Postflight: Copy overlays
@@ -862,93 +877,63 @@ COPY \
     rootfs/ /
 
 # -----------------------------------------------
-# Postflight: Configure overlay permissions
+# Postflight: Overlay permissions
 # -----------------------------------------------
 
 RUN \
     chmod 0755 \
         /entrypoint.sh \
-        /usr/bin/toolbox.sh
+        /usr/bin/toolbox.sh \
+    && \
+    chown -R root:root \
+        "${TOOLBOX_CONFIG}" \
+    && \
+    chmod -R go-w \
+        "${TOOLBOX_CONFIG}"
 
 # -----------------------------------------------
 # Postflight: Install Neovim plugins
 # -----------------------------------------------
 
 RUN \
-    echo "**** Fetch Neovim Plugins | ${INSTALL_NEOVIM} ****" \
-    && umask 0002 \
-    && if [ "${INSTALL_NEOVIM}" = "true" ]; then \
-        echo "**** Fetch Neovim Plugins ****" \
-            && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
-            && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
-            && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
-            && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
-            && /usr/local/bin/vi \
-                --headless \
-                "+Lazy! sync" \
-                "+MasonToolsInstallSync" \
-                +qa \
-        && \
-        echo "**** Clean Neovim cache ****" \
-            && rm -rf -- "${TOOLBOX_CACHE:?}/nvim"; \
+        echo "**** Fetch Nvim Plugins ****" \
+    umask 0002; \
+    if [ "${INSTALL_NEOVIM}" = "true" ]; then \
+        echo "**** Fetch Nvim Plugins ****" \
+          && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
+          && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
+          && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
+          && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
+          && /usr/local/bin/vi \
+              --headless \
+              "+Lazy! sync" \
+              +qa \
+          && \
+          /usr/local/bin/vi \
+              --headless \
+              "+MasonToolsInstallSync" \
+              +qa; \
     fi
 
 # -----------------------------------------------
-# Postflight: Clear build caches
+# Postflight: Re-apply shared permissions
 # -----------------------------------------------
 
 RUN \
-    echo "**** Postflight: Clear toolbox caches ****" \
-    && test "${TOOLBOX_CACHE}" = "/opt/toolbox/cache" \
-    && rm -rf -- "${TOOLBOX_CACHE}" \
-    && install \
-        -d \
-        -o root \
-        -g toolbox-shared \
-        -m 2775 \
-        "${TOOLBOX_CACHE}" \
-    && setfacl \
-        -m g:toolbox-shared:rwx \
-        -m d:g:toolbox-shared:rwx \
-        -m d:m:rwx \
-        "${TOOLBOX_CACHE}"
-
-# -----------------------------------------------
-# Postflight: Finalize user-writable targets
-# -----------------------------------------------
-
-RUN \
-    echo "**** Finalize shared toolbox permissions ****" \
+    echo "**** Postflight: Finalize shared toolbox permissions ****" \
     && chgrp -R toolbox-shared \
-        "${TOOLBOX_CONFIG}" \
         "${TOOLBOX_DATA}" \
         "${TOOLBOX_STATE}" \
         "${TOOLBOX_CACHE}" \
         "${TOOLBOX_BIN}" \
     && chmod -R g+rwX \
-        "${TOOLBOX_CONFIG}" \
         "${TOOLBOX_DATA}" \
         "${TOOLBOX_STATE}" \
         "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-    && find \
-        "${TOOLBOX_CONFIG}" \
-        "${TOOLBOX_DATA}" \
-        "${TOOLBOX_STATE}" \
-        "${TOOLBOX_CACHE}" \
-        "${TOOLBOX_BIN}" \
-        -xdev \
-        -type d \
-        -exec chmod g+s {} + \
-        -exec setfacl \
-            -m g:toolbox-shared:rwx \
-            -m d:g:toolbox-shared:rwx \
-            -m d:m:rwx \
-            {} + \
-    && find "${TOOLBOX_BIN}" \
-        -xdev \
-        -type f \
-        -exec chmod g+x {} +
+        "${TOOLBOX_BIN}"
+
+RUN \
+  rm -rf /opt/toolbox/state/nvim/shada/*
 
 # =============================================================================
 # : Execute
