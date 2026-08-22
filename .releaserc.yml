@@ -8,6 +8,10 @@
 # Options
 # https://semantic-release.gitbook.io/semantic-release/usage/configuration#options
 
+# Allow releasing from develop branhc - overriding default github plugins
+branches:
+  - develop
+
 # Continuous Integration environment verifications. This allows making releases from a local machine.
 ci: false 
 
