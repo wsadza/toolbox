@@ -323,6 +323,14 @@ require("lazy").setup({
 		dependencies = {
 			"nvim-tree/nvim-web-devicons",
 		},
+    lazy = false,
+    init = function()
+      vim.api.nvim_create_autocmd("VimEnter", {
+        callback = function()
+          vim.cmd("NvimTreeOpen")
+        end,
+      })
+    end,
 		keys = {
 			{
 				"<leader>e",
@@ -538,8 +546,8 @@ require("lazy").setup({
     "mason-org/mason.nvim",
 		cmd = "Mason",
 		build = ":MasonUpdate",
-		opts = {},
-	},
+    opts = {},
+  },
 
   {
     "mason-org/mason-lspconfig.nvim",
@@ -965,3 +973,31 @@ vim.lsp.util.open_floating_preview = function(contents, syntax, opts, ...)
 
 	return original_open_floating_preview(contents, syntax, opts, ...)
 end
+
+--------------------------------
+-- Guard to detach wrong LSP's
+--------------------------------
+
+-- 1. Ensure action.yml is YAML from the start
+vim.filetype.add({
+  pattern = {
+    [".*/%.github/actions/.*/action%.yml"] = "yaml",
+    [".*/%.github/actions/.*/action%.yaml"] = "yaml",
+  },
+})
+
+-- 2. Safety net: remove incompatible LSP clients
+vim.api.nvim_create_autocmd({ "BufEnter", "FileType" }, {
+  callback = function(args)
+    local ft = vim.bo[args.buf].filetype
+
+    for _, client in ipairs(vim.lsp.get_clients({ bufnr = args.buf })) do
+      local filetypes = client.config.filetypes
+
+      if filetypes and not vim.tbl_contains(filetypes, ft) then
+        vim.lsp.buf_detach_client(args.buf, client.id)
+        vim.diagnostic.reset(client.id, args.buf)
+      end
+    end
+  end,
+})

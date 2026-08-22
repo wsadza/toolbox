@@ -4,7 +4,7 @@
 # ----------------------------------------------------------
 #
 # FILE: ./deployments/docker-compose.yml
-# DESC: 
+# DESC: Docker compose building definition 
 #
 ############################################################
 
@@ -18,20 +18,19 @@ services:
     hostname:       toolbox 
     container_name: toolbox 
     image:          toolbox
-    working_dir:    /host
     restart:        unless-stopped
 
     # =============================================================================
     # : Volumes
     # =============================================================================
     volumes:
-      # Make host files available at identical absolute paths.
+      # Host home paths are identical inside toolbox.
+      - /home:/home
+
+      # Full host filesystem escape hatch.
       - /:/host
 
-      # Mount host home
-      - ${HOME}:/opt/home
-
-      # Mount Docker Socket
+      # Docker daemon.
       - /var/run/docker.sock:/var/run/docker.sock
 
     # =============================================================================
@@ -47,15 +46,9 @@ services:
         SUITE:                  ${SUITE}
         DIGEST:                 ${DIGEST}
 
-        # -- User
-        USER_NAME:              ${USER_NAME}
-        USER_UID:               ${USER_UID}
-        DOCKER_GID:             ${DOCKER_GID}
-
         # -- Neovim
         INSTALL_NEOVIM:         ${INSTALL_NEOVIM}
         NEOVIM_VERSION:         ${NEOVIM_VERSION}
-        TREE_SITTER_CLI:        ${TREE_SITTER_CLI}
 
         # -- Docker
         INSTALL_DOCKER:         ${INSTALL_DOCKER}
@@ -90,6 +83,16 @@ services:
         INSTALL_NODE_JS:        ${INSTALL_NODE_JS}
         NODE_JS_VERSION:        ${NODE_JS_VERSION}
         NODE_JS_MAJOR:          ${NODE_JS_MAJOR}
+
+        # -- Gomplate
+        INSTALL_GOMPLATE:       ${INSTALL_GOMPLATE}
+        GOMPLATE_VERSION:       ${GOMPLATE_VERSION}
+
+        # -- Extra packages (python; node; cargo)
+        CARGO_TREE_SITTER_CLI:  ${CARGO_TREE_SITTER_CLI}
+        NPM_NEOVIM:             ${NPM_NEOVIM}
+        NPM_OPENCODE_AI:        ${NPM_OPENCODE_AI}
+        PIPX_UV:                ${PIPX_UV}
 
     # =============================================================================
     # : Environments 

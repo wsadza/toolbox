@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+############################################################
+# Copyright (c) 2026 Igor Sadza
+# Released under the GPLv3 license
+# ----------------------------------------------------------
+#
+# FILE: ./toolbox
+# DESC: Toolbox execution script 
+#
+############################################################
+
+set -euo pipefail
+
+exec docker exec \
+  --interactive \
+  --tty \
+  --user 0:0 \
+  --env "TOOLBOX_UID=$(id -u)" \
+  --env "TOOLBOX_GID=$(id -g)" \
+  --env "TOOLBOX_GROUPS=$(id -G | tr ' ' ',')" \
+  --env "TOOLBOX_USER=$(id -un)" \
+  --env "TOOLBOX_HOME=${HOME}" \
+  --env "TOOLBOX_CWD=${PWD}" \
+  toolbox \
+  /usr/bin/toolbox.sh

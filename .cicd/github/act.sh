@@ -1,16 +1,19 @@
-#!/bin/bash
-# https://nektosact.com/usage/index.html
+#!/usr/bin/env bash
 
-# ----
-#cat << EOF > /tmp/act_secrets
-#GITHUB_TOKEN=""
-#TOKEN=""
-#EOF
-# ----
+############################################################
+# Copyright (c) 2026 Igor Sadza
+# Released under the GPLv3 license
+# ----------------------------------------------------------
+#
+#   FILE: ./.cicd/github/act.sh
+#   DESC: Local CICD Entrypoint
+#   TIPS: https://nektosact.com/usage/index.html
+#
+############################################################
+
+set -euo pipefail
 
 act push \
-  --secret GITHUB_TOKEN="$(gh auth token)" \
-  --workflows ${PWD}/.github/workflows/building.yml \
-  --eventpath ${PWD}/.github/events/push-master.json \
-  --secret-file /tmp/act_secrets \
-  --verbose
+  --action-offline-mode \
+  --secret WORKFLOW_TOKEN="$(gh auth token)" \
+  --workflows ${PWD}/.github/workflows/build.yml

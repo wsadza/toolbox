@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.14
+
 ############################################################
 # Copyright (c) 2026 Igor Sadza 
 # Released under the GPLv3 license
@@ -21,7 +23,7 @@ ARG \
 # : Base 
 # =============================================================================
 
-FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}} AS RUNTIME
+FROM ${DISTRIBUTION}:${SUITE}${DIGEST:+@${DIGEST}}
 
 # Build Time Arguments 
 ARG \
@@ -70,33 +72,6 @@ RUN \
             /var/tmp/* \
             /tmp/*
 
-# -----------------------------------------------
-# Base: Configure user 
-
-ARG \
-    USER_NAME=monke \
-    USER_UID=1000 \
-    USER_GID=1000
-
-RUN \
-    echo "**** Base: User Configure ****" \
-      && groupadd \
-        --gid ${USER_GID} \
-        ${USER_NAME} \
-      && useradd \
-        --uid "${USER_UID}" \
-        --gid "${USER_GID}" \
-        --shell /bin/bash \
-        --create-home \
-        --home-dir "/home/${USER_NAME}" \
-        "${USER_NAME}" \
-    && \
-    echo "**** Base: Configure SUDO Privileges ****" \
-        && usermod -aG sudo ${USER_NAME} \
-        && printf '%s\n' \
-            "${USER_NAME} ALL=(ALL) NOPASSWD: ALL" \
-            > "/etc/sudoers.d/${USER_NAME}" \
-        && chmod 0440 "/etc/sudoers.d/${USER_NAME}"
 
 # =============================================================================
 # : Core
@@ -168,7 +143,7 @@ RUN \
 
 ARG \
     INSTALL_DOCKER="false" \
-    DOCKER_GID=999 \
+    DOCKER_GID=109 \
     DOCKER_CE_VERSION="" \
     DOCKER_CE_CLI_VERSION="" \
     CONTAINERD_VERSION="" \
@@ -204,21 +179,12 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search containerd.io \
-        && apt search docker-buildx-plugin \
-        && apt search docker-ce \
-        && apt search docker-ce-cli \
-        && apt search docker-compose-plugin \
         && apt-get install --no-install-recommends -y \
             docker-ce${DOCKER_CE_VERSION:+=${DOCKER_CE_VERSION}} \
             docker-ce-cli${DOCKER_CE_CLI_VERSION:+=${DOCKER_CE_CLI_VERSION}} \
             containerd.io${CONTAINERD_VERSION:+=${CONTAINERD_VERSION}} \
             docker-buildx-plugin${DOCKER_BUILDX_VERSION:+=${DOCKER_BUILDX_VERSION}} \
             docker-compose-plugin${DOCKER_COMPOSE_VERSION:+=${DOCKER_COMPOSE_VERSION}} \
-    && \
-    echo "**** Permisions ****" \
-        && groupadd --gid "${DOCKER_GID}" docker-host \
-        && usermod --append --groups docker-host ${USER_NAME} \
     && \
     echo "**** Section cleanup ****" \
         && apt-get clean autoclean -y \
@@ -321,7 +287,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search helm$ \
         && apt-get install --no-install-recommends -y \
           helm${HELM_VERSION:+=${HELM_VERSION}} \
     && \
@@ -367,7 +332,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search kubectl$ \
         && apt-get install --no-install-recommends -y \
           kubectl${KUBECTL_VERSION:+=${KUBECTL_VERSION}} \
     && \
@@ -413,7 +377,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search terraform$ \
         && apt-get install --no-install-recommends -y \
           terraform${TERRAFORM_VERSION:+=${TERRAFORM_VERSION}} \
     && \
@@ -431,7 +394,7 @@ RUN \
 
 ARG \
     INSTALL_AZURE_CLI="false" \
-    AZURE_CLI_SUITE="bullseye" \
+    AZURE_CLI_SUITE="bookworm" \
     AZURE_CLI_VERSION="" 
 
 RUN \
@@ -455,16 +418,18 @@ RUN \
           'Types: deb' \
           'URIs: https://packages.microsoft.com/repos/azure-cli/' \
           "Suites: ${AZURE_CLI_SUITE}" \
-          'Components: stable' \
+          'Components: main' \
           "Architectures: $(dpkg --print-architecture)" \
           'Signed-By: /etc/apt/keyrings/microsoft.asc' \
          > /etc/apt/sources.list.d/microsoft.azure-cli.sources \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search azure-cli$ \
         && apt-get install --no-install-recommends -y \
             azure-cli${AZURE_CLI_VERSION:+=${AZURE_CLI_VERSION}} \
+        && test -x /opt/az/bin/python3 \
+        && /opt/az/bin/python3 --version \
+        && az version \
     && \
     echo "**** Section cleanup ****" \
         && apt-get clean autoclean -y \
@@ -507,7 +472,6 @@ RUN \
     && \
     echo "**** Installing ****" \
         && apt-get update \
-        && apt search nodejs$  \
         && apt-get install --no-install-recommends -y \
             nodejs${NODE_JS_VERSION:+=${NODE_JS_VERSION}} \
     && \
@@ -530,38 +494,41 @@ ARG \
 RUN \
     echo "**** Core: Install Gomplate | Version: latest ****" \
     && \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-           curl \
-           jq \
-    && \
-    echo "**** Installation ****" \
-        && ARCHITECTURE="$(dpkg --print-architecture)" \
-        && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
-        && BIN_RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases/latest" | \
-               jq -r \
-               --arg ARCHITECTURE "${ARCHITECTURE}" \
-               '.assets[] \
-               | select( \
-                 .name \
-                 | contains("linux") \
-                   and contains($ARCHITECTURE) \
-               ) \
-               | .browser_download_url' \
-           )" \
-        && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
-        && chmod +x gomplate \
-        && mv gomplate /usr/bin/gomplate \
-    && \
-    echo "**** Cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*
+    if [ "${INSTALL_GOMPLATE}" = "true" ]; \
+    then \
+        echo "**** Prepare ****" \
+            && apt-get update \
+            && apt-get install --no-install-recommends -y \
+               curl \
+               jq \
+        && \
+        echo "**** Installation ****" \
+            && ARCHITECTURE="$(dpkg --print-architecture)" \
+            && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
+            && BIN_RELEASE_URL="$( \
+                 curl -fsSL "${API_URL}/releases/latest" | \
+                   jq -r \
+                   --arg ARCHITECTURE "${ARCHITECTURE}" \
+                   '.assets[] \
+                   | select( \
+                     .name \
+                     | contains("linux") \
+                       and contains($ARCHITECTURE) \
+                   ) \
+                   | .browser_download_url' \
+               )" \
+            && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
+            && chmod +x gomplate \
+            && mv gomplate /usr/bin/gomplate \
+        && \
+        echo "**** Cleanup ****" \
+            && apt-get clean autoclean -y \
+            && apt-get autoremove -y \
+            && rm -rf \
+                /var/lib/apt/lists/* \
+                /var/tmp/* \
+                /tmp/*; \
+    fi
 
 # -----------------------------------------------
 # Core: Install ACT 
@@ -573,42 +540,45 @@ ARG \
 RUN \
     echo "**** Core: Install ACT | Version: latest ****" \
     && \
-    echo "**** Prepare ****" \
-        && apt-get update \
-        && apt-get install --no-install-recommends -y \
-           curl \
-           jq \
-    && \
-    echo "**** Installation ****" \
-        && ARCHITECTURE="x86_64" \
-        && API_URL="https://api.github.com/repos/nektos/act" \
-        && RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases/latest" | \
-               jq -r \
-               --arg ARCHITECTURE "${ARCHITECTURE}" \
-               '.assets[] \
-               | select( \
-                 .name \
-                 | contains("Linux_x86_64") \
-                   and contains($ARCHITECTURE) \
-               ) \
-               | .browser_download_url' \
-           )" \
-        && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
-        && mkdir -p /opt/act \
-        && tar -xzf /tmp/act.tar.gz \
-            --directory=/opt/act \
-        && chmod +x /opt/act/act \
-        && ln -sf /opt/act/act /usr/local/bin/act \
-        && act --version \
-    && \
-    echo "**** Cleanup ****" \
-        && apt-get clean autoclean -y \
-        && apt-get autoremove -y \
-        && rm -rf \
-            /var/lib/apt/lists/* \
-            /var/tmp/* \
-            /tmp/*
+    if [ "${INSTALL_GOMPLATE}" = "true" ]; \
+    then \
+      echo "**** Prepare ****" \
+          && apt-get update \
+          && apt-get install --no-install-recommends -y \
+             curl \
+             jq \
+      && \
+      echo "**** Installation ****" \
+          && ARCHITECTURE="x86_64" \
+          && API_URL="https://api.github.com/repos/nektos/act" \
+          && RELEASE_URL="$( \
+               curl -fsSL "${API_URL}/releases/latest" | \
+                 jq -r \
+                 --arg ARCHITECTURE "${ARCHITECTURE}" \
+                 '.assets[] \
+                 | select( \
+                   .name \
+                   | contains("Linux_x86_64") \
+                     and contains($ARCHITECTURE) \
+                 ) \
+                 | .browser_download_url' \
+             )" \
+          && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
+          && mkdir -p /opt/act \
+          && tar -xzf /tmp/act.tar.gz \
+              --directory=/opt/act \
+          && chmod +x /opt/act/act \
+          && ln -sf /opt/act/act /usr/local/bin/act \
+          && act --version \
+      && \
+      echo "**** Cleanup ****" \
+          && apt-get clean autoclean -y \
+          && apt-get autoremove -y \
+          && rm -rf \
+              /var/lib/apt/lists/* \
+              /var/tmp/* \
+              /tmp/*; \
+    fi
 
 # -----------------------------------------------
 # Core: Miscellaneous
@@ -648,6 +618,7 @@ RUN \
           python3-pip \
           tree \
           iputils-ping \
+          acl \
     && \
     echo "**** Extra Config ****" \
        && git config --global credential.helper store \
@@ -660,212 +631,331 @@ RUN \
             /var/tmp/* \
             /tmp/*
 
-# -----------------------------------------------
-# Core: Python & NPM & Cargo packages 
-#
+# =============================================================================
+# : Config
+# =============================================================================
 
-# ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} 
-# ~ if arg is NON empty add --version
+# -----------------------------------------------
+# Config: Groups
+# -----------------------------------------------
 
 ARG \
-    TREE_SITTER_CLI=
+    TOOLBOX_SHARED_GID=29999
+
+ENV \
+    TOOLBOX_SHARED_GID=${TOOLBOX_SHARED_GID}
 
 RUN \
-    echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
-    && \
-        echo "**** Install extra python packages ****" \
-              && pipx install --global uv \
-        && \
-        if [ "${INSTALL_NODE_JS}" = "true" ]; \
-        then \
-        echo "**** Install extra node packages ****" \
-              && npm install --global \
-                  opencode-ai \
-                  neovim \
-              && npm cache clean --force; \
-        fi \
-        && \
-        echo "**** Install extra cargo packages ****" \
-              && rustup default stable \
-              && cargo install \
-                  tree-sitter-cli \
-                  --locked \
-                  --root /usr/local \
-                  ${TREE_SITTER_CLI:+--version=${TREE_SITTER_CLI}} \
-    && \
-    echo "**** Clean installation caches ****" \
-        && python3 -m pip cache purge
-
-# =============================================================================
-# : Config 
-# =============================================================================
+    echo "**** Config: User & Groups  ****" \
+        && groupadd \
+            --gid "${TOOLBOX_SHARED_GID}" \
+            toolbox-shared
 
 # -----------------------------------------------
-# Config: Variables
-#
+# Config: Base
+# -----------------------------------------------
 
 ENV \
     SHELL=/bin/bash \
-    TERM=xterm-256color \ 
-    HOME=/home/${USER_NAME}
+    TERM=xterm-256color
+
+# -----------------------------------------------
+# Config: Toolbox filesystem
+# -----------------------------------------------
 
 ENV \
-    XDG_ROOT=/opt/toolbox
+    TOOLBOX_ROOT=/opt/toolbox \
+    TOOLBOX_CONFIG=/opt/toolbox/config \
+    TOOLBOX_DATA=/opt/toolbox/share \
+    TOOLBOX_STATE=/opt/toolbox/state \
+    TOOLBOX_CACHE=/opt/toolbox/cache \
+    TOOLBOX_BIN=/opt/toolbox/bin \
+    TOOLBOX_RUNTIME_ROOT=/run/toolbox
+
+# -----------------------------------------------
+# Config: Node.js / npm
+# -----------------------------------------------
 
 ENV \
-    XDG_RUNTIME_DIR=/run/toolbox \
-    XDG_CONFIG_HOME=${XDG_ROOT}/config \
-    XDG_DATA_HOME=${XDG_ROOT}/share \
-    XDG_STATE_HOME=${XDG_ROOT}/state \
-    XDG_CACHE_HOME=${XDG_ROOT}/cache \
-    XDG_BIN_HOME=${XDG_ROOT}/bin
-
-# Node.js / npm
-ENV \
-    NPM_CONFIG_CACHE=${XDG_CACHE_HOME}/npm \
-    NPM_CONFIG_HOME=${XDG_CONFIG_HOME}/npm \
-    NPM_CONFIG_USERCONFIG=${XDG_CONFIG_HOME}/npm/npmrc \
+    NPM_CONFIG_CACHE=${TOOLBOX_CACHE}/npm \
     NPM_CONFIG_PYTHON=/usr/bin/python3
 
-# Go
-ENV \
-    GOPATH=${XDG_DATA_HOME}/go \
-    GOCACHE=${XDG_CACHE_HOME}/go/build \
-    GOMODCACHE=${XDG_CACHE_HOME}/go/modules \
-    GOTMPDIR=${XDG_RUNTIME_DIR}/go
+# -----------------------------------------------
+# Config: Go
+# -----------------------------------------------
 
-# Rust
 ENV \
-    CARGO_HOME=${XDG_DATA_HOME}/cargo \
-    CARGO_TARGET_DIR=${XDG_CACHE_HOME}/cargo/target
+    GOPATH=${TOOLBOX_DATA}/go \
+    GOBIN=${TOOLBOX_BIN} \
+    GOCACHE=${TOOLBOX_CACHE}/go/build \
+    GOMODCACHE=${TOOLBOX_CACHE}/go/modules
 
-# uv
-ENV \
-    UV_TOOL_DIR=${XDG_DATA_HOME}/uv/tools \
-    UV_TOOL_BIN_DIR=${XDG_BIN_HOME} \
-    UV_CACHE_DIR=${XDG_CACHE_HOME}/uv
+# GOTMPDIR is configured per runtime user by toolbox.sh.
 
-# Liquidprompt
+# -----------------------------------------------
+# Config: Rust
+# -----------------------------------------------
+
 ENV \
-    LOCAL_RCFILE=${XDG_CONFIG_HOME}/liquidprompt/liquidpromptrc \
+    CARGO_HOME=${TOOLBOX_DATA}/cargo \
+    CARGO_TARGET_DIR=${TOOLBOX_CACHE}/cargo/target \
+    RUSTUP_HOME=${TOOLBOX_DATA}/rustup
+
+# -----------------------------------------------
+# Config: uv
+# -----------------------------------------------
+
+ENV \
+    UV_TOOL_DIR=${TOOLBOX_DATA}/uv/tools \
+    UV_TOOL_BIN_DIR=${TOOLBOX_BIN} \
+    UV_CACHE_DIR=${TOOLBOX_CACHE}/uv
+
+# -----------------------------------------------
+# Config: Liquidprompt
+# -----------------------------------------------
+
+ENV \
+    LOCAL_RCFILE=${TOOLBOX_CONFIG}/liquidpromptrc \
     LIQUIDPROMPT_THEME=powerline
 
-# OpenCode
-ENV \
-    OPENCODE_HOME=${XDG_CONFIG_HOME}/opencode \
-    OPENCODE_CONFIG=${XDG_CONFIG_HOME}/opencode/opencode.json
+# -----------------------------------------------
+# Config: OpenCode
+# -----------------------------------------------
 
-# Git
 ENV \
-    GIT_CONFIG_DIR=${XDG_CONFIG_HOME}/git \
-    GIT_CONFIG_GLOBAL=${XDG_CONFIG_HOME}/git/gitconfig \
-    GIT_EDITOR="vi"
+    OPENCODE_CONFIG=${TOOLBOX_CONFIG}/opencode/opencode.json
 
-# Docker 
-ENV \
-    DOCKER_CONFIG=${XDG_CONFIG_HOME}/docker
+# -----------------------------------------------
+# Config: Git
+# -----------------------------------------------
 
-# Final Path
 ENV \
-    PATH=${XDG_BIN_HOME}:${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}
+    GIT_EDITOR=vi
+
+# -----------------------------------------------
+# Config: PATH
+# -----------------------------------------------
+
+ENV \
+    PATH=${TOOLBOX_BIN}:${CARGO_HOME}/bin:${GOPATH}/bin:${PATH}
 
 # =============================================================================
-# : Postflight 
+# : Postflight
 # =============================================================================
 
 # -----------------------------------------------
-# Postflight: Create workspace targets 
-#
+# Postflight: Create toolbox filesystem
+# -----------------------------------------------
 
 RUN \
-    echo "**** Postflight: Create workspace targets ****" \
-    && \
-    install -d \
-        -o "${USER_UID}" \
-        -g "${USER_GID}" \
+    echo "**** Postflight: Create toolbox filesystem ****" \
+    && install \
+        -d \
+        -o root \
+        -g root \
         -m 0755 \
-        \
-        "${XDG_CONFIG_HOME}" \
-        "${XDG_DATA_HOME}" \
-        "${XDG_STATE_HOME}" \
-        "${XDG_CACHE_HOME}" \
-        \
+        "${TOOLBOX_ROOT}" \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_RUNTIME_ROOT}"; \
+    \
+    echo "**** Postflight: Create shared workspace targets ****" \
+    && install \
+        -d \
+        -o root \
+        -g toolbox-shared \
+        -m 2775 \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
         "${NPM_CONFIG_CACHE}" \
-        "${NPM_CONFIG_USERCONFIG}" \
-        \
         "${GOPATH}" \
         "${GOCACHE}" \
         "${GOMODCACHE}" \
-        "${GOTMPDIR}" \
-        \
         "${CARGO_HOME}" \
         "${CARGO_TARGET_DIR}" \
-        \
+        "${RUSTUP_HOME}" \
         "${UV_TOOL_DIR}" \
-        "${UV_TOOL_BIN_DIR}" \
-        \
-        "${OPENCODE_HOME}" \
-        \
-        "${GIT_CONFIG_DIR}" \
-    && \
-    install -d \
-        -o "${USER_UID}" \
-        -g "${USER_GID}" \
-        -m 0700 \
-        "${XDG_RUNTIME_DIR}" \
-    && \
-    install \
-        -o "${USER_UID}" \
-        -g "${USER_GID}" \
-        -m 0644 \
-        /dev/null \
-        "${NPM_CONFIG_USERCONFIG}"
-
-# =============================================================================
-# : User Space 
-# =============================================================================
-
-# Switch to non-root user.
-USER ${USER_NAME}
+        "${UV_CACHE_DIR}"; \
+    \
+    echo "**** Postflight: Create shared workspace targets ****" \
+    && install \
+        -d \
+        -o root \
+        -g toolbox-shared \
+        -m 2775 \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+        "${NPM_CONFIG_CACHE}" \
+        "${GOPATH}" \
+        "${GOCACHE}" \
+        "${GOMODCACHE}" \
+        "${CARGO_HOME}" \
+        "${CARGO_TARGET_DIR}" \
+        "${RUSTUP_HOME}" \
+        "${UV_TOOL_DIR}" \
+        "${UV_CACHE_DIR}" \
+    && setfacl \
+        -m g:toolbox-shared:rwx \
+        -m d:g:toolbox-shared:rwx \
+        -m d:m:rwx \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+        "${NPM_CONFIG_CACHE}" \
+        "${GOPATH}" \
+        "${GOCACHE}" \
+        "${GOMODCACHE}" \
+        "${CARGO_HOME}" \
+        "${CARGO_TARGET_DIR}" \
+        "${RUSTUP_HOME}" \
+        "${UV_TOOL_DIR}" \
+        "${UV_CACHE_DIR}"
 
 # -----------------------------------------------
-# Postflight: Copy overlay and change owner 
-
-COPY \
-    --chown=${USER_UID}:${USER_GID} \
-    rootfs / 
-
-COPY \
-    --chown=${USER_UID}:${USER_GID} \
-    --chmod=0755 \
-    rootfs/entrypoint.sh /entrypoint.sh
-
+# Postflight: Python, npm, and Cargo packages
 # -----------------------------------------------
-# Postflight: Installing nvim plugins 
-#
+
+ARG \
+    CARGO_TREE_SITTER_CLI=0.26.11 \
+    NPM_NEOVIM=5.4.0 \
+    NPM_OPENCODE_AI=1.18.13 \
+    PIPX_UV=0.12.1
 
 RUN \
-    if [ "${INSTALL_NEOVIM}" = "true" ]; \
-    then \
-      echo "**** Fetch Nvim Plugins ****" \
-          && vi --headless \
-              "+Lazy! sync" +qa \
-          && vi --headless \
-              "+lua require('nvim-treesitter').install(vim.g.treesitter_parsers):wait()" \
-              +qa \
-          && vi --headless \
-              "+MasonToolsInstallSync" +qa; \
+    echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
+    && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
+    && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
+    && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
+    && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
+    && umask 0002 \
+    && echo "**** Install extra Python packages ****" \
+    && pipx install \
+        --global \
+        "uv${PIPX_UV:+==${PIPX_UV}}" \
+    && if [ "${INSTALL_NODE_JS}" = "true" ]; then \
+        echo "**** Install extra Node packages ****" \
+        && npm install \
+            --global \
+            "opencode-ai@${NPM_OPENCODE_AI}" \
+            "neovim@${NPM_NEOVIM}" \
+        && npm cache clean --force; \
+    fi \
+    && echo "**** Install extra Cargo packages ****" \
+    && rustup default stable \
+    && cargo install \
+        tree-sitter-cli \
+        --locked \
+        --root /usr/local \
+        ${CARGO_TREE_SITTER_CLI:+--version=${CARGO_TREE_SITTER_CLI}} \
+    && echo "**** Clean installation caches ****" \
+    && python3 -m pip cache purge
+
+# -----------------------------------------------
+# Postflight: Copy overlays
+# -----------------------------------------------
+
+COPY \
+    rootfs/ /
+
+# -----------------------------------------------
+# Postflight: Configure overlay permissions
+# -----------------------------------------------
+
+RUN \
+    chmod 0755 \
+        /entrypoint.sh \
+        /usr/bin/toolbox.sh
+
+# -----------------------------------------------
+# Postflight: Install Neovim plugins
+# -----------------------------------------------
+
+RUN \
+    echo "**** Fetch Neovim Plugins | ${INSTALL_NEOVIM} ****" \
+    && umask 0002 \
+    && if [ "${INSTALL_NEOVIM}" = "true" ]; then \
+        echo "**** Fetch Neovim Plugins ****" \
+            && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
+            && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
+            && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
+            && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
+            && /usr/local/bin/vi \
+                --headless \
+                "+Lazy! sync" \
+                "+MasonToolsInstallSync" \
+                +qa \
+        && \
+        echo "**** Clean Neovim cache ****" \
+            && rm -rf -- "${TOOLBOX_CACHE:?}/nvim"; \
     fi
 
+# -----------------------------------------------
+# Postflight: Clear build caches
+# -----------------------------------------------
+
+RUN \
+    echo "**** Postflight: Clear toolbox caches ****" \
+    && test "${TOOLBOX_CACHE}" = "/opt/toolbox/cache" \
+    && rm -rf -- "${TOOLBOX_CACHE}" \
+    && install \
+        -d \
+        -o root \
+        -g toolbox-shared \
+        -m 2775 \
+        "${TOOLBOX_CACHE}" \
+    && setfacl \
+        -m g:toolbox-shared:rwx \
+        -m d:g:toolbox-shared:rwx \
+        -m d:m:rwx \
+        "${TOOLBOX_CACHE}"
+
+# -----------------------------------------------
+# Postflight: Finalize user-writable targets
+# -----------------------------------------------
+
+RUN \
+    echo "**** Finalize shared toolbox permissions ****" \
+    && chgrp -R toolbox-shared \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+    && chmod -R g+rwX \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+    && find \
+        "${TOOLBOX_CONFIG}" \
+        "${TOOLBOX_DATA}" \
+        "${TOOLBOX_STATE}" \
+        "${TOOLBOX_CACHE}" \
+        "${TOOLBOX_BIN}" \
+        -xdev \
+        -type d \
+        -exec chmod g+s {} + \
+        -exec setfacl \
+            -m g:toolbox-shared:rwx \
+            -m d:g:toolbox-shared:rwx \
+            -m d:m:rwx \
+            {} + \
+    && find "${TOOLBOX_BIN}" \
+        -xdev \
+        -type f \
+        -exec chmod g+x {} +
+
 # =============================================================================
-# : Execute 
+# : Execute
 # =============================================================================
 
-# Switch to non-root user.
-USER ${USER_NAME}
+WORKDIR \
+    /
 
-# Set working target
-WORKDIR ${HOME} 
-
-# Set entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT \
+    ["/entrypoint.sh"]
