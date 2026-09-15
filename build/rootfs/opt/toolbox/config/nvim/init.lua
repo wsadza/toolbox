@@ -118,112 +118,119 @@ vim.opt.rtp:prepend(lazypath)
 
 require("lazy").setup({
 
-	-- ----------------------------------------------------------
-  -- CodeCompanion
-	-- ----------------------------------------------------------
+   --------------------------------------------------------------------
+   -- GitHub Copilot (inline completions)
+   --------------------------------------------------------------------
+   {
+     "github/copilot.vim",
+     event = "InsertEnter",
+     config = function()
+       vim.g.copilot_no_tab_map = true
+       vim.keymap.set("i", "<C-l>", 'copilot#Accept("\\<CR>")', {
+         expr = true,
+         replace_keycodes = false,
+         silent = true,
+         desc = "Accept Copilot suggestion",
+       })
+     end,
+   },
 
-  {
-    "olimorris/codecompanion.nvim",
-  
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-      "nvim-treesitter/nvim-treesitter",
-    },
-  
-    config = function()
-      local adapters = require("codecompanion.adapters")
-  
-      local caveman_prompt = [[
-  Respond terse like smart caveman. All technical substance stay. Only fluff die.
-  
-  ACTIVE EVERY RESPONSE. No filler drift.
-  
-  Rules:
-  - Remove filler, pleasantries, unnecessary hedging, and repetition.
-  - Fragments allowed when meaning remains clear.
-  - Keep technical terminology exact.
-  - Keep code blocks, commands, paths, API names, function names, symbols,
-    and exact error messages unchanged.
-  - Never invent abbreviations.
-  - Preserve user's language.
-  - Never announce or name this style.
-  - State each fact once.
-  - Write normal, explicit prose for security warnings, irreversible actions,
-    and ordered instructions where compression could cause ambiguity.
-  - Code, commit messages, and pull-request content use normal task-appropriate form.
-  
-  Pattern:
-  [problem or fact]. [reason]. [next action].
-  ]]
-  
-      require("codecompanion").setup({
-        adapters = {
-          http = {
-            local_llama = function()
-              return adapters.extend("openai_compatible", {
-                name = "local_llama",
-  
-                env = {
-                  url = "http://0.0.0.0:8080",
-                  api_key = "local",
-                },
-  
-                schema = {
-                  model = {
-                    default = os.getenv("LLAMA_ARG_MODEL") or "local",
-                  },
-                },
-              })
-            end,
-          },
-        },
-  
-        interactions = {
-          chat = {
-            adapter = "local_llama",
-  
-            opts = {
-              system_prompt = function()
-                return caveman_prompt
-              end,
-            },
-          },
-  
-          inline = {
-            adapter = "local_llama",
-          },
-        },
-      })
-  
-      vim.keymap.set(
-        { "n", "v" },
-        "<leader>ac",
-        "<cmd>CodeCompanionChat Toggle<cr>",
-        { desc = "AI chat", silent = true }
-      )
-  
-      vim.keymap.set(
-        { "n", "v" },
-        "<leader>aa",
-        "<cmd>CodeCompanionActions<cr>",
-        { desc = "AI actions", silent = true }
-      )
-  
-      vim.keymap.set(
-        "x",
-        "<leader>ae",
-        ":CodeCompanion /explain<cr>",
-        { desc = "AI explain selection", silent = true }
-      )
-  
-      vim.keymap.set(
-        "x",
-        "<leader>af",
-        ":CodeCompanion /fix<cr>",
-        { desc = "AI fix selection", silent = true }
-      )
-    end,
-  },
+   --------------------------------------------------------------------
+   -- CodeCompanion (uses GitHub Copilot)
+   --------------------------------------------------------------------
+   {
+     "olimorris/codecompanion.nvim",
+     dependencies = {
+       "github/copilot.vim",
+       "nvim-lua/plenary.nvim",
+       "nvim-treesitter/nvim-treesitter",
+     },
+     opts = {
+       strategies = {
+         chat = {
+           adapter = "copilot",
+         },
+         inline = {
+           adapter = "copilot",
+         },
+         agent = {
+           adapter = "copilot",
+         },
+       },
+       display = {
+         chat = {
+           window = {
+             layout = "vertical",
+             width = 0.35,
+           },
+         },
+       },
+     },
+
+     config = function(_, opts)
+       require("codecompanion").setup(opts)
+
+       ----------------------------------------------------------------
+       -- Chat
+       ----------------------------------------------------------------
+       vim.keymap.set(
+         { "n", "v" },
+         "<leader>ac",
+         "<cmd>CodeCompanionChat Toggle<CR>",
+         { desc = "AI Chat", silent = true }
+       )
+       vim.keymap.set(
+         { "n", "v" },
+         "<leader>aa",
+         "<cmd>CodeCompanionActions<CR>",
+         { desc = "AI Actions", silent = true }
+       )
+
+       ----------------------------------------------------------------
+       -- Selection workflows
+       ----------------------------------------------------------------
+       vim.keymap.set(
+         "x",
+         "<leader>ae",
+         ":CodeCompanion /explain<CR>",
+         { desc = "Explain Selection", silent = true }
+       )
+       vim.keymap.set(
+         "x",
+         "<leader>af",
+         ":CodeCompanion /fix<CR>",
+         { desc = "Fix Selection", silent = true }
+       )
+       vim.keymap.set(
+         "x",
+         "<leader>ar",
+         ":CodeCompanion /refactor<CR>",
+         { desc = "Refactor Selection", silent = true }
+       )
+       vim.keymap.set(
+         "x",
+         "<leader>at",
+         ":CodeCompanion /tests<CR>",
+         { desc = "Generate Tests", silent = true }
+       )
+
+       ----------------------------------------------------------------
+       -- Git workflows
+       ----------------------------------------------------------------
+       vim.keymap.set(
+         "n",
+         "<leader>apr",
+         "<cmd>CodeCompanion /review<CR>",
+         { desc = "Review Changes", silent = true }
+       )
+       vim.keymap.set(
+         "n",
+         "<leader>apc",
+         "<cmd>CodeCompanion /commit<CR>",
+         { desc = "Generate Commit Message", silent = true }
+       )
+     end,
+   },
 
 	-- ----------------------------------------------------------
 	-- OSC52
@@ -315,7 +322,7 @@ require("lazy").setup({
 	},
 
 	-- ----------------------------------------------------------
-	-- File explorer
+	-- NvimTree 
 	-- ----------------------------------------------------------
 
 	{
@@ -424,7 +431,7 @@ require("lazy").setup({
     branch = "main",
     lazy = false,
     build = ":TSUpdate",
-  
+
     config = function()
       local parsers = {
         "bash",
@@ -447,7 +454,7 @@ require("lazy").setup({
         "vimdoc",
         "yaml",
       }
-  
+
       -- Expose the list for image/bootstrap installation.
       --vim.g.treesitter_parsers = parsers
       require("nvim-treesitter").install(parsers)
@@ -510,35 +517,6 @@ require("lazy").setup({
 	},
 
 	-- ----------------------------------------------------------
-	-- NvimTree
-	-- ----------------------------------------------------------
-
-	{
-		"nvim-tree/nvim-tree.lua",
-		dependencies = {
-			"nvim-tree/nvim-web-devicons",
-		},
-		keys = {
-			{
-				"<leader>e",
-				"<cmd>NvimTreeToggle<cr>",
-				desc = "Toggle file explorer",
-			},
-		},
-		opts = {
-			view = {
-				width = 35,
-			},
-			renderer = {
-				group_empty = true,
-			},
-			filters = {
-				dotfiles = false,
-			},
-		},
-	},
-
-	-- ----------------------------------------------------------
 	-- Mason
 	-- ----------------------------------------------------------
 
@@ -559,7 +537,7 @@ require("lazy").setup({
       automatic_enable = true,
     },
   },
-  
+
   {
     "WhoIsSethDaniel/mason-tool-installer.nvim",
     dependencies = {

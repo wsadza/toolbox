@@ -30,6 +30,49 @@ ARG \
     DEBIAN_FRONTEND=noninteractive
 
 # ---------------------
+# Base: Configure Proxy (corporate needs) 
+
+ARG \
+    HTTP_PROXY="" \
+    HTTPS_PROXY=""
+
+RUN \
+    echo "**** Base: Configure Corporate Proxy ****" \
+    && \
+    echo "Configure APT for the corporate proxy" \
+        && printf '%s\n' \
+          "Acquire::http::Proxy \"${HTTP_PROXY}\";" \
+          "Acquire::https::Proxy \"${HTTPS_PROXY}\";" \
+          'Acquire::http::Pipeline-Depth "0";' \
+          'Acquire::https::Pipeline-Depth "0";' \
+          'Acquire::Retries "2";' \
+          'Acquire::http::Timeout "60";' \
+          'Acquire::https::Timeout "180";' \
+          > /etc/apt/apt.conf.d/80-corporate-proxy \
+    && \
+    echo "Bootstrap or repair the CA bundle over the original HTTP source" \
+        && if ! test -s /etc/ssl/certs/ca-certificates.crt; \
+           then \
+           echo "Bootstrap or repair the CA bundle over the original HTTP source" \
+             && apt-get update \
+             && apt-get install --reinstall -y --no-install-recommends ca-certificates \
+             && update-ca-certificates --fresh; \
+           fi \
+        && test -s /etc/ssl/certs/ca-certificates.crt \
+    && \
+    echo "Use HTTPS for Debian downloads, especially larger packages" \
+        && sed -i \
+          's|http://deb.debian.org|https://deb.debian.org|g' \
+          /etc/apt/sources.list.d/debian.sources \
+    && \
+    echo "**** Section cleanup ****" \
+        && rm -rf \
+            /var/lib/apt/lists/* \
+            /var/cache/apt/* \
+            /var/tmp/* \
+            /tmp/*
+
+# ---------------------
 # Base: Configure Locales
 
 ARG \
@@ -72,6 +115,12 @@ RUN \
             /var/tmp/* \
             /tmp/*
 
+# =============================================================================
+# : GitHub 
+# =============================================================================
+
+ARG \
+    GITHUB_TOKEN=${GITHUB_TOKEN}
 
 # =============================================================================
 # : Core
@@ -99,12 +148,15 @@ RUN \
         && API_URL="https://api.github.com/repos/neovim/neovim" \
         && if [ "$NEOVIM_VERSION" = "latest" ]; then \
               NEOVIM_VERSION="$(\
-                curl -fsSL ${API_URL}/releases/latest \
-                | jq -r .tag_name \
+              curl -fsSL \
+		            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+		            ${API_URL}/releases/latest | jq -r .tag_name \
               )"; \
            fi \
         && RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases?per_page=100" | \
+               curl -fsSL \
+	         -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                 "${API_URL}/releases?per_page=100" | \
                jq -r --arg VERSION "${NEOVIM_VERSION}" \
                '.[] \
                | select( \
@@ -217,24 +269,28 @@ RUN \
         && API_URL="https://api.github.com/repos/derailed/k9s" \
         && if [ "$K9S_VERSION" = "latest" ]; then \
               K9S_VERSION="$(\
-                curl -fsSL ${API_URL}/releases/latest \
-                | jq -r .tag_name \
+                curl \
+		              -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+		              ${API_URL}/releases/latest | jq -r .tag_name \
               )"; \
            fi \
         && RELEASE_URL="$( \
-             curl -fsSL "${API_URL}/releases?per_page=100" | \
-               jq -r --arg VERSION "${K9S_VERSION}" \
-               '.[] \
-               | select( \
-                   .tag_name == $VERSION \
-               ) \
-               | .assets[] \
-               | select( \
-                   .browser_download_url \
-                   | contains("Linux_amd64") \
-                     and endswith(".tar.gz") \
-               ) \
-               | .browser_download_url' \
+           curl \
+	           -fsSL \
+             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+             "${API_URL}/releases?per_page=100" | \
+           jq -r --arg VERSION "${K9S_VERSION}" \
+             '.[] \
+             | select( \
+                 .tag_name == $VERSION \
+             ) \
+             | .assets[] \
+             | select( \
+                 .browser_download_url \
+                 | contains("Linux_amd64") \
+                   and endswith(".tar.gz") \
+             ) \
+             | .browser_download_url' \
            )" \
     && \
     echo "**** Installing Release ****" \
@@ -506,16 +562,18 @@ RUN \
             && ARCHITECTURE="$(dpkg --print-architecture)" \
             && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
             && BIN_RELEASE_URL="$( \
-                 curl -fsSL "${API_URL}/releases/latest" | \
-                   jq -r \
-                   --arg ARCHITECTURE "${ARCHITECTURE}" \
-                   '.assets[] \
-                   | select( \
-                     .name \
-                     | contains("linux") \
-                       and contains($ARCHITECTURE) \
-                   ) \
-                   | .browser_download_url' \
+		            curl -fsSL \
+		              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+		              "${API_URL}/releases/latest" | \
+                jq -r \
+                  --arg ARCHITECTURE "${ARCHITECTURE}" \
+                  '.assets[] \
+                  | select( \
+                    .name \
+                    | contains("linux") \
+                      and contains($ARCHITECTURE) \
+                  ) \
+                  | .browser_download_url' \
                )" \
             && curl -o gomplate -fsSL "${BIN_RELEASE_URL}" \
             && chmod +x gomplate \
@@ -552,16 +610,19 @@ RUN \
           && ARCHITECTURE="x86_64" \
           && API_URL="https://api.github.com/repos/nektos/act" \
           && RELEASE_URL="$( \
-               curl -fsSL "${API_URL}/releases/latest" | \
-                 jq -r \
-                 --arg ARCHITECTURE "${ARCHITECTURE}" \
-                 '.assets[] \
-                 | select( \
-                   .name \
-                   | contains("Linux_x86_64") \
-                     and contains($ARCHITECTURE) \
-                 ) \
-                 | .browser_download_url' \
+	           curl \
+               -fsSL \
+	             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+               "${API_URL}/releases/latest" | \
+             jq -r \
+               --arg ARCHITECTURE "${ARCHITECTURE}" \
+               '.assets[] \
+               | select( \
+                 .name \
+                 | contains("Linux_x86_64") \
+                   and contains($ARCHITECTURE) \
+               ) \
+               | .browser_download_url' \
              )" \
           && curl -o /tmp/act.tar.gz -fsSL "${RELEASE_URL}" \
           && mkdir -p /opt/act \
@@ -823,14 +884,14 @@ ARG \
     CARGO_TREE_SITTER_CLI=0.26.11 \
     NPM_NEOVIM=5.4.0 \
     NPM_OPENCODE_AI=1.18.13 \
-    PIPX_UV=0.12.1
+    PIPX_UV=0.12.1 \
+    NPM_CODEX=0.153.4
+
+# ---------------------
+# Base: Proxy config 
 
 RUN \
     echo "**** Core: Miscellaneous (npm / cargo / pipx) ****" \
-    && export XDG_CONFIG_HOME="${TOOLBOX_CONFIG}" \
-    && export XDG_DATA_HOME="${TOOLBOX_DATA}" \
-    && export XDG_STATE_HOME="${TOOLBOX_STATE}" \
-    && export XDG_CACHE_HOME="${TOOLBOX_CACHE}" \
     && umask 0002 \
     && echo "**** Install extra Python packages ****" \
     && pipx install \
@@ -842,6 +903,7 @@ RUN \
             --global \
             "opencode-ai@${NPM_OPENCODE_AI}" \
             "neovim@${NPM_NEOVIM}" \
+	    "@openai/codex@${NPM_CODEX}" \
         && npm cache clean --force; \
     fi \
     && echo "**** Install extra Cargo packages ****" \

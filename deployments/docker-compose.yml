@@ -34,6 +34,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
     # =============================================================================
+    # : Network 
+    # =============================================================================
+    network_mode: host
+
+    # =============================================================================
     # : Build 
     # =============================================================================
     build:
@@ -93,6 +98,14 @@ services:
         NPM_NEOVIM:             ${NPM_NEOVIM}
         NPM_OPENCODE_AI:        ${NPM_OPENCODE_AI}
         PIPX_UV:                ${PIPX_UV}
+
+        # -- Proxy 
+        HTTP_PROXY:             ${HTTP_PROXY} 
+        HTTPS_PROXY:            ${HTTPS_PROXY} 
+        NO_PROXY:               ${NO_PROXY}
+
+        # -- Github
+        GITHUB_TOKEN:           ${GITHUB_TOKEN}
 
     # =============================================================================
     # : Environments 

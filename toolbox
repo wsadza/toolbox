@@ -13,6 +13,7 @@
 set -euo pipefail
 
 exec docker exec \
+  --network host \
   --interactive \
   --tty \
   --user 0:0 \
