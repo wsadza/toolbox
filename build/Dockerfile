@@ -116,13 +116,6 @@ RUN \
             /tmp/*
 
 # =============================================================================
-# : GitHub 
-# =============================================================================
-
-ARG \
-    GITHUB_TOKEN=${GITHUB_TOKEN}
-
-# =============================================================================
 # : Core
 # =============================================================================
 
@@ -149,14 +142,12 @@ RUN \
         && if [ "$NEOVIM_VERSION" = "latest" ]; then \
               NEOVIM_VERSION="$(\
               curl -fsSL \
-		            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-		            ${API_URL}/releases/latest | jq -r .tag_name \
+              ${API_URL}/releases/latest | jq -r .tag_name \
               )"; \
            fi \
         && RELEASE_URL="$( \
                curl -fsSL \
-	         -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                 "${API_URL}/releases?per_page=100" | \
+               "${API_URL}/releases?per_page=100" | \
                jq -r --arg VERSION "${NEOVIM_VERSION}" \
                '.[] \
                | select( \
@@ -269,15 +260,12 @@ RUN \
         && API_URL="https://api.github.com/repos/derailed/k9s" \
         && if [ "$K9S_VERSION" = "latest" ]; then \
               K9S_VERSION="$(\
-                curl \
-		              -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-		              ${API_URL}/releases/latest | jq -r .tag_name \
+                curl -fsSL \
+		${API_URL}/releases/latest | jq -r .tag_name \
               )"; \
            fi \
         && RELEASE_URL="$( \
-           curl \
-	           -fsSL \
-             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+           curl -fsSL \
              "${API_URL}/releases?per_page=100" | \
            jq -r --arg VERSION "${K9S_VERSION}" \
              '.[] \
@@ -562,9 +550,8 @@ RUN \
             && ARCHITECTURE="$(dpkg --print-architecture)" \
             && API_URL="https://api.github.com/repos/hairyhenderson/gomplate" \
             && BIN_RELEASE_URL="$( \
-		            curl -fsSL \
-		              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-		              "${API_URL}/releases/latest" | \
+                curl -fsSL \
+                  "${API_URL}/releases/latest" | \
                 jq -r \
                   --arg ARCHITECTURE "${ARCHITECTURE}" \
                   '.assets[] \
@@ -610,9 +597,7 @@ RUN \
           && ARCHITECTURE="x86_64" \
           && API_URL="https://api.github.com/repos/nektos/act" \
           && RELEASE_URL="$( \
-	           curl \
-               -fsSL \
-	             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+	       curl -fsSL \
                "${API_URL}/releases/latest" | \
              jq -r \
                --arg ARCHITECTURE "${ARCHITECTURE}" \
@@ -680,6 +665,9 @@ RUN \
           tree \
           iputils-ping \
           acl \
+          ssh \
+          nfs-common \
+          netcat-openbsd \
     && \
     echo "**** Extra Config ****" \
        && git config --global credential.helper store \
